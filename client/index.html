@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sterling Catering - Test Client</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { margin-bottom: 30px; color: #fff; }
+        h2 { margin: 30px 0 15px; color: #ffd700; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        
+        .section { 
+            background: #252525; 
+            padding: 20px; 
+            margin-bottom: 20px; 
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+        
+        .auth-status {
+            background: #1e3a5f;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        .auth-status.logged-in { background: #1e4f2f; }
+        
+        input, button, select, textarea {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: 1px solid #444;
+            border-radius: 4px;
+            background: #333;
+            color: #e0e0e0;
+            font-size: 14px;
+        }
+        
+        button {
+            background: #4a90e2;
+            color: white;
+            cursor: pointer;
+            font-weight: 600;
+            border: none;
+            transition: background 0.2s;
+        }
+        button:hover { background: #357abd; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        
+        .result {
+            background: #1a1a1a;
+            padding: 15px;
+            margin-top: 10px;
+            border-radius: 4px;
+            border: 1px solid #444;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .error { color: #ff6b6b; }
+        .success { color: #51cf66; }
+        
+        .token-display {
+            word-break: break-all;
+            font-size: 11px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🍽️ Sterling Catering - Test Client</h1>
+        
+        <div class="auth-status" id="authStatus">
+            <strong>Status:</strong> Not logged in
+        </div>
+
+        <!-- AUTHENTICATION -->
+        <div class="section">
+            <h2>🔐 Authentication</h2>
+            <div class="grid">
+                <div>
+                    <h3>Register</h3>
+                    <input type="email" id="regEmail" placeholder="Email">
+                    <input type="text" id="regName" placeholder="Name">
+                    <input type="password" id="regPassword" placeholder="Password">
+                    <button onclick="register()">Register</button>
+                </div>
+                <div>
+                    <h3>Login</h3>
+                    <input type="email" id="loginEmail" placeholder="Email" value="josh@josh.com">
+                    <input type="password" id="loginPassword" placeholder="Password" value="1111">
+                    <button onclick="login()">Login</button>
+                    <button onclick="logout()" style="background: #e24a4a;">Logout</button>
+                </div>
+            </div>
+            <div class="result" id="authResult"></div>
+        </div>
+
+        <!-- MEMBERS -->
+        <div class="section">
+            <h2>👥 Members</h2>
+            <button onclick="getMembers()">Get My Members</button>
+            <div style="margin-top: 15px;">
+                <input type="text" id="memberName" placeholder="Name">
+                <input type="text" id="memberRelation" placeholder="Relation (self, spouse, child)">
+                <input type="text" id="memberDiet" placeholder="Dietary Restrictions">
+                <button onclick="createMember()">Add Member</button>
+            </div>
+            <div class="result" id="membersResult"></div>
+        </div>
+
+        <!-- INFRASTRUCTURE -->
+        <div class="section">
+            <h2>🏛️ Infrastructure (Public)</h2>
+            <div class="grid">
+                <div>
+                    <button onclick="getDiningRooms()">Get Dining Rooms</button>
+                    <div class="result" id="roomsResult"></div>
+                </div>
+                <div>
+                    <button onclick="getTimeSlots()">Get Time Slots</button>
+                    <div class="result" id="slotsResult"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RESERVATIONS -->
+        <div class="section">
+            <h2>📅 Reservations</h2>
+            <button onclick="getReservations()">Get My Reservations</button>
+            <div style="margin-top: 15px;">
+                <select id="resDiningRoom">
+                    <option value="1">Main Hall</option>
+                    <option value="2">Garden Room</option>
+                    <option value="3">Private Dining</option>
+                    <option value="4">Terrace</option>
+                    <option value="5">Wine Cellar</option>
+                </select>
+                <select id="resTimeSlot">
+                    <option value="1">Breakfast</option>
+                    <option value="2">Lunch</option>
+                    <option value="3">Dinner</option>
+                    <option value="4">Late Night</option>
+                </select>
+                <input type="date" id="resDate" value="2026-03-15">
+                <textarea id="resNotes" placeholder="Notes" rows="2"></textarea>
+                <button onclick="createReservation()">Create Reservation</button>
+            </div>
+            <div class="result" id="reservationsResult"></div>
+        </div>
+
+        <!-- ATTENDEES -->
+        <div class="section">
+            <h2>👤 Attendees</h2>
+            <input type="number" id="attendeeResId" placeholder="Reservation ID">
+            <button onclick="getAttendees()">Get Attendees</button>
+            <div style="margin-top: 15px;">
+                <input type="number" id="attendeeMemberId" placeholder="Member ID (leave empty for guest)">
+                <input type="text" id="attendeeName" placeholder="Guest Name (if not using member)">
+                <input type="text" id="attendeeDiet" placeholder="Guest Dietary Restrictions">
+                <button onclick="addAttendee()">Add Attendee</button>
+            </div>
+            <div class="result" id="attendeesResult"></div>
+        </div>
+
+        <!-- FEES -->
+        <div class="section">
+            <h2>💰 Fees & Rules</h2>
+            <button onclick="getRules()">Get Fee Rules</button>
+            <div style="margin-top: 15px;">
+                <input type="number" id="feeResId" placeholder="Reservation ID">
+                <button onclick="getFees()">Get Fees for Reservation</button>
+                <div style="margin-top: 10px;">
+                    <select id="feeRuleId">
+                        <option value="1">No Call No Show ($40)</option>
+                        <option value="2">Peak Hours ($15)</option>
+                        <option value="3">Large Party ($10/person)</option>
+                        <option value="4">Late Cancellation (50%)</option>
+                    </select>
+                    <input type="number" id="feeQuantity" placeholder="Quantity (for per_person fees)">
+                    <input type="number" id="feeAmount" placeholder="Calculated Amount" value="40">
+                    <button onclick="applyFee()">Apply Fee</button>
+                </div>
+            </div>
+            <div class="result" id="feesResult"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8080';
+        let token = localStorage.getItem('token');
+        
+        updateAuthStatus();
+
+        function updateAuthStatus() {
+            const status = document.getElementById('authStatus');
+            if (token) {
+                status.className = 'auth-status logged-in';
+                status.innerHTML = `<strong>Status:</strong> ✅ Logged in<br><span class="token-display">Token: ${token.substring(0, 50)}...</span>`;
+            } else {
+                status.className = 'auth-status';
+                status.innerHTML = '<strong>Status:</strong> ❌ Not logged in';
+            }
+        }
+
+        async function apiCall(endpoint, method = 'GET', body = null, requiresAuth = false) {
+            const options = {
+                method,
+                headers: { 'Content-Type': 'application/json' }
+            };
+            
+            if (requiresAuth && token) {
+                options.headers['Authorization'] = `Bearer ${token}`;
+            }
+            
+            if (body) {
+                options.body = JSON.stringify(body);
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}${endpoint}`, options);
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    return { error: true, status: response.status, data };
+                }
+                
+                return { error: false, data };
+            } catch (error) {
+                return { error: true, message: error.message };
+            }
+        }
+
+        function displayResult(elementId, result) {
+            const el = document.getElementById(elementId);
+            if (result.error) {
+                el.innerHTML = `<span class="error">❌ Error: ${JSON.stringify(result, null, 2)}</span>`;
+            } else {
+                el.innerHTML = `<span class="success">✅ Success:</span>\n${JSON.stringify(result.data, null, 2)}`;
+            }
+        }
+
+        // AUTH
+        async function register() {
+            const email = document.getElementById('regEmail').value;
+            const name = document.getElementById('regName').value;
+            const password = document.getElementById('regPassword').value;
+            const result = await apiCall('/users', 'POST', { email, name, password });
+            displayResult('authResult', result);
+        }
+
+        async function login() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            const result = await apiCall('/users/login', 'POST', { email, password });
+            
+            if (!result.error) {
+                token = result.data.access_token;
+                localStorage.setItem('token', token);
+                updateAuthStatus();
+            }
+            
+            displayResult('authResult', result);
+        }
+
+        function logout() {
+            token = null;
+            localStorage.removeItem('token');
+            updateAuthStatus();
+            document.getElementById('authResult').innerHTML = '<span class="success">✅ Logged out</span>';
+        }
+
+        // MEMBERS
+        async function getMembers() {
+            const result = await apiCall('/members/', 'GET', null, true);
+            displayResult('membersResult', result);
+        }
+
+        async function createMember() {
+            const name = document.getElementById('memberName').value;
+            const relation = document.getElementById('memberRelation').value;
+            const dietary_restrictions = document.getElementById('memberDiet').value || null;
+            const result = await apiCall('/members/', 'POST', { name, relation, dietary_restrictions }, true);
+            displayResult('membersResult', result);
+        }
+
+        // INFRASTRUCTURE
+        async function getDiningRooms() {
+            const result = await apiCall('/dining-rooms/');
+            displayResult('roomsResult', result);
+        }
+
+        async function getTimeSlots() {
+            const result = await apiCall('/time-slots/');
+            displayResult('slotsResult', result);
+        }
+
+        // RESERVATIONS
+        async function getReservations() {
+            const result = await apiCall('/reservations/', 'GET', null, true);
+            displayResult('reservationsResult', result);
+        }
+
+        async function createReservation() {
+            const dining_room_id = parseInt(document.getElementById('resDiningRoom').value);
+            const time_slot_id = parseInt(document.getElementById('resTimeSlot').value);
+            const date = document.getElementById('resDate').value;
+            const notes = document.getElementById('resNotes').value || null;
+            const result = await apiCall('/reservations/', 'POST', { dining_room_id, time_slot_id, date, notes }, true);
+            displayResult('reservationsResult', result);
+        }
+
+        // ATTENDEES
+        async function getAttendees() {
+            const resId = document.getElementById('attendeeResId').value;
+            const result = await apiCall(`/reservations/${resId}/attendees`, 'GET', null, true);
+            displayResult('attendeesResult', result);
+        }
+
+        async function addAttendee() {
+            const resId = document.getElementById('attendeeResId').value;
+            const member_id = document.getElementById('attendeeMemberId').value || null;
+            const name = document.getElementById('attendeeName').value || null;
+            const dietary_restrictions = document.getElementById('attendeeDiet').value || null;
+            
+            const body = {};
+            if (member_id) body.member_id = parseInt(member_id);
+            if (name) body.name = name;
+            if (dietary_restrictions) body.dietary_restrictions = dietary_restrictions;
+            
+            const result = await apiCall(`/reservations/${resId}/attendees`, 'POST', body, true);
+            displayResult('attendeesResult', result);
+        }
+
+        // FEES
+        async function getRules() {
+            const result = await apiCall('/rules/');
+            displayResult('feesResult', result);
+        }
+
+        async function getFees() {
+            const resId = document.getElementById('feeResId').value;
+            const result = await apiCall(`/reservations/${resId}/fees`, 'GET', null, true);
+            displayResult('feesResult', result);
+        }
+
+        async function applyFee() {
+            const resId = document.getElementById('feeResId').value;
+            const rule_id = parseInt(document.getElementById('feeRuleId').value);
+            const quantity = document.getElementById('feeQuantity').value || null;
+            const calculated_amount = parseFloat(document.getElementById('feeAmount').value);
+            
+            const body = { rule_id, calculated_amount };
+            if (quantity) body.quantity = parseInt(quantity);
+            
+            const result = await apiCall(`/reservations/${resId}/fees`, 'POST', body, true);
+            displayResult('feesResult', result);
+        }
+    </script>
+</body>
+</html>
