@@ -1,25 +1,23 @@
-# seed.py
-"""
-Seed script to populate database with test data.
-Run this to reset your database with fresh test data.
-"""
-from datetime import time  
+import random
+from datetime import date, time, timedelta
 from database import SessionLocal, engine, Base
 from models.user import User
 from models.member import Member
 from models.dining_room import DiningRoom
 from models.time_slot import TimeSlot
-from datetime import date
 from models.reservation import Reservation
 from models.reservation_attendee import ReservationAttendee
 from models.rule import Rule
 from models.fee import Fee
 
+# Meaningful data pools for randomized content
+REAL_GUESTS = ["Uncle Bob", "Aunt May", "Cousin Vinny", "The Neighbors", "Work Team", "Client Group", "The Johnsons"]
+REAL_NOTES = ["Anniversary celebration!", "Needs a high chair", "Window seat if possible", "Quiet corner", "Quick lunch", "Splitting the check"]
 
 def seed_database():
     """
-    Drop all tables, recreate them, and add seed data.
-    WARNING: This deletes ALL data!
+    Drops all tables, recreates them, and populates with specific user/member 
+    data and 20 randomized reservations with attendee and fee logic.
     """
     print("🗑️  Dropping all tables...")
     Base.metadata.drop_all(bind=engine)
@@ -27,320 +25,177 @@ def seed_database():
     print("🔨 Creating all tables...")
     Base.metadata.create_all(bind=engine)
     
-    print("🌱 Seeding data...")
-    
     db = SessionLocal()
-    
     try:
+        print("🌱 Seeding Users and Members...")
         # ============================================================
-        # USER 1: Josh
+        # 1. USERS & MEMBERS DATA (Your actual list)
         # ============================================================
-        josh_user = User(
-            email="josh@josh.com",
-            name="Josh",
-            is_admin=False
-        )
-        josh_user.set_password("1111")
-        db.add(josh_user)
-        db.commit()
-        db.refresh(josh_user)
-        print(f"✅ Created user: {josh_user.email}")
-        
-        # Member: Josh (self)
-        josh_member = Member(
-            user_id=josh_user.id,
-            name="Josh",
-            relation="self",
-            dietary_restrictions="no shellfish"
-        )
-        db.add(josh_member)
-        print(f"   └─ Member: {josh_member.name} ({josh_member.relation})")
-        
-        # Member: Dorrie (spouse)
-        dorrie_member = Member(
-            user_id=josh_user.id,
-            name="Dorrie",
-            relation="spouse",
-            dietary_restrictions="no bluecheese"
-        )
-        db.add(dorrie_member)
-        print(f"   └─ Member: {dorrie_member.name} ({dorrie_member.relation})")
-        
-        
-        # ============================================================
-        # USER 2: Sarah
-        # ============================================================
-        sarah_user = User(
-            email="sarah@sarah.com",
-            name="Sarah",
-            is_admin=False
-        )
-        sarah_user.set_password("1111")
-        db.add(sarah_user)
-        db.commit()
-        db.refresh(sarah_user)
-        print(f"✅ Created user: {sarah_user.email}")
-        
-        # Member: Sarah (self)
-        sarah_member = Member(
-            user_id=sarah_user.id,
-            name="Sarah",
-            relation="self",
-            dietary_restrictions="no bananas"
-        )
-        db.add(sarah_member)
-        print(f"   └─ Member: {sarah_member.name} ({sarah_member.relation})")
-        
-        # Member: Reed (spouse/partner)
-        reed_member = Member(
-            user_id=sarah_user.id,
-            name="Reed",
-            relation="spouse",
-            dietary_restrictions=None
-        )
-        db.add(reed_member)
-        print(f"   └─ Member: {reed_member.name} ({reed_member.relation})")
-        
-        db.commit()
-        
-        # ============================================================
-        # DINING ROOMS (Infrastructure)
-        # ============================================================
-        print("\n🏛️  Creating dining rooms...")
-        
-        dining_rooms = [
-            {"name": "Main Hall", "capacity": 100},
-            {"name": "Garden Room", "capacity": 50},
-            {"name": "Private Dining", "capacity": 20},
-            {"name": "Terrace", "capacity": 30},
-            {"name": "Wine Cellar", "capacity": 15},
+        users_data = [
+            {"email": "josh@josh.com", "name": "Josh Dicker", "members": [
+                {"name": "Josh Dicker", "rel": "self", "diet": "No shellfish, No blue cheese"},
+                {"name": "Dorrie Goodman", "rel": "spouse", "diet": "No olives, No blue cheese"},
+                {"name": "Demi Dicker", "rel": "daughter", "diet": "No spicy"}
+            ]},
+            {"email": "zach@zach.com", "name": "Zach Scott", "members": [
+                {"name": "Zach Scott", "rel": "self", "diet": "No bananas"},
+                {"name": "Cynthia Chen", "rel": "authorized", "diet": None},
+                {"name": "Sadie Scott", "rel": "daughter", "diet": "No oysters"},
+                {"name": "Tess Scott", "rel": "daughter", "diet": "No pork"}
+            ]},
+            {"email": "gabe@gbae.com", "name": "Gabe Scott", "members": [
+                {"name": "Gabe Scott", "rel": "self", "diet": "No dairy"},
+                {"name": "Amanda Siegel", "rel": "authorized", "diet": None},
+                {"name": "Palmer Scott", "rel": "daughter", "diet": "No tuna"},
+                {"name": "Miller Scott", "rel": "daughter", "diet": None}
+            ]},
+            {"email": "ariel@ariel.com", "name": "Ariel Scott-Dicker", "members": [
+                {"name": "Ariel Scott-Dicker", "rel": "self", "diet": "No sardines"}
+            ]},
+            {"email": "sarah@sarah.com", "name": "Sara Scott", "members": [
+                {"name": "Sarah Scott", "rel": "self", "diet": "No bananas"},
+                {"name": "Reed Edwards", "rel": "spouse", "diet": None},
+                {"name": "Zoe Scott-Edwards", "rel": "daughter", "diet": "No runny eggs"},
+                {"name": "Chase Scott-Edwards", "rel": "son", "diet": None}
+            ]},
+            {"email": "jaime@jaime.com", "name": "Jaime Aker", "members": [
+                {"name": "Jaime Aker", "rel": "self", "diet": "No curry"},
+                {"name": "Nat Aker", "rel": "spouse", "diet": "Vegan"},
+                {"name": "Nolan Aker", "rel": "son", "diet": "Vegan"}
+            ]},
+            {"email": "brian@brian.com", "name": "Brian Kaiser", "members": [
+                {"name": "Brian Kaiser", "rel": "self", "diet": "No fish"},
+                {"name": "Vicki Kaiser", "rel": "spouse", "diet": "No olives, No shellfish"}
+            ]},
+            {"email": "brandon@brandon.com", "name": "Brandon Kaiser", "members": [
+                {"name": "Brandon Kaiser", "rel": "self", "diet": None},
+                {"name": "Karolina Kaiser", "rel": "spouse", "diet": "No pears"}
+            ]}
         ]
+
+        all_users = []
+        all_members = []
+
+        for u_info in users_data:
+            user = User(email=u_info["email"], name=u_info["name"], is_admin=False)
+            user.set_password("1111")
+            db.add(user)
+            db.flush() 
+            all_users.append(user)
+            
+            for m_info in u_info["members"]:
+                member = Member(
+                    user_id=user.id,
+                    name=m_info["name"],
+                    relation=m_info["rel"],
+                    dietary_restrictions=m_info["diet"]
+                )
+                db.add(member)
+                all_members.append(member)
         
-        for room_data in dining_rooms:
-            room = DiningRoom(
-                name=room_data["name"],
-                capacity=room_data["capacity"]
+        # ============================================================
+        # 2. INFRASTRUCTURE (Unchanged)
+        # ============================================================
+        print("🏛️  Creating Infrastructure...")
+        rooms = [
+            DiningRoom(name="Main Hall", capacity=100),
+            DiningRoom(name="Garden Room", capacity=50),
+            DiningRoom(name="Private Dining", capacity=20),
+            DiningRoom(name="Terrace", capacity=30),
+            DiningRoom(name="Wine Cellar", capacity=15)
+        ]
+        db.add_all(rooms)
+        
+        slots = [
+            TimeSlot(name="Breakfast", start_time=time(8,0), end_time=time(11,0)),
+            TimeSlot(name="Lunch", start_time=time(12,0), end_time=time(15,0)),
+            TimeSlot(name="Dinner", start_time=time(18,0), end_time=time(21,0)),
+            TimeSlot(name="Late Night", start_time=time(21,0), end_time=time(23,30))
+        ]
+        db.add_all(slots)
+
+        rules = [
+            Rule(code="no_call_no_show", name="No Call No Show Fee", base_amount=40.0, fee_type="flat", enabled=True),
+            Rule(code="peak_hours", name="Peak Hours Surcharge", base_amount=15.0, fee_type="flat", enabled=True),
+            Rule(code="large_party", name="Large Party Fee", base_amount=10.0, threshold=6, fee_type="per_person", enabled=True),
+            Rule(code="cancellation", name="Late Cancellation Fee", base_amount=50.0, fee_type="percentage", enabled=True),
+        ]
+        db.add_all(rules)
+        db.flush()
+
+        # ============================================================
+        # 3. RANDOMIZED RESERVATIONS + FEES (20 Total)
+        # ============================================================
+        print("📅 Generating 20 randomized reservations...")
+        for _ in range(20):
+            creator = random.choice(all_users)
+            res_date = date.today() + timedelta(days=random.randint(1, 30))
+            
+            res = Reservation(
+                created_by_id=creator.id,
+                dining_room_id=random.choice(rooms).id,
+                time_slot_id=random.choice(slots).id,
+                date=res_date,
+                notes=random.choice(REAL_NOTES),
+                status="confirmed"
             )
-            db.add(room)
-            print(f"   └─ {room.name} (capacity: {room.capacity})")
-        
-        db.commit()
+            db.add(res)
+            db.flush()
 
-        # ============================================================
-        # TIME SLOTS (Infrastructure)
-        # ============================================================
-        print("\n🕐 Creating time slots...")
-        
-        time_slots = [
-            {"name": "Breakfast", "start_time": time(8, 0), "end_time": time(11, 0)},
-            {"name": "Lunch", "start_time": time(12, 0), "end_time": time(15, 0)},
-            {"name": "Dinner", "start_time": time(18, 0), "end_time": time(21, 0)},
-            {"name": "Late Night", "start_time": time(21, 0), "end_time": time(23, 30)},
-        ]
-        
-        for slot_data in time_slots:
-            slot = TimeSlot(
-                name=slot_data["name"],
-                start_time=slot_data["start_time"],
-                end_time=slot_data["end_time"]
-            )
-            db.add(slot)
-            print(f"   └─ {slot.name} ({slot.start_time.strftime('%I:%M %p')} - {slot.end_time.strftime('%I:%M %p')})")
-        
-        db.commit()
+            # Add attendees
+            party_count = 0
+            creator_members = [m for m in all_members if m.user_id == creator.id]
+            for m in creator_members:
+                if random.random() > 0.2: 
+                    db.add(ReservationAttendee(
+                        reservation_id=res.id, member_id=m.id, name=m.name,
+                        attendee_type="member", dietary_restrictions=m.dietary_restrictions
+                    ))
+                    party_count += 1
 
-        # ============================================================
-        # SAMPLE RESERVATIONS
-        # ============================================================
-        print("\n📅 Creating sample reservations...")
-        
-        # Josh books Main Hall for Dinner on Feb 15
-        josh_reservation = Reservation(
-            created_by_id=josh_user.id,
-            dining_room_id=1,  # Main Hall
-            time_slot_id=3,    # Dinner
-            date=date(2026, 2, 15),
-            notes="Anniversary dinner",
-            status="confirmed"
-        )
-        db.add(josh_reservation)
-        print(f"   └─ Josh: Main Hall, Dinner, Feb 15")
-        
-        # Sarah books Garden Room for Lunch on Feb 20
-        sarah_reservation = Reservation(
-            created_by_id=sarah_user.id,
-            dining_room_id=2,  # Garden Room
-            time_slot_id=2,    # Lunch
-            date=date(2026, 2, 20),
-            notes="Birthday lunch",
-            status="confirmed"
-        )
-        db.add(sarah_reservation)
-        print(f"   └─ Sarah: Garden Room, Lunch, Feb 20")
-        
-        db.commit()
+            # Add randomized guests
+            for _ in range(random.randint(0, 4)):
+                db.add(ReservationAttendee(
+                    reservation_id=res.id, member_id=None, name=random.choice(REAL_GUESTS),
+                    attendee_type="guest", dietary_restrictions=None
+                ))
+                party_count += 1
 
-        # ============================================================
-        # SAMPLE ATTENDEES
-        # ============================================================
-        print("\n👥 Adding attendees to reservations...")
-        
-        # Josh's reservation: Josh + Dorrie + 1 guest
-        josh_attendee = ReservationAttendee(
-            reservation_id=josh_reservation.id,
-            member_id=josh_member.id,
-            name=josh_member.name,
-            attendee_type="member",
-            dietary_restrictions=josh_member.dietary_restrictions
-        )
-        db.add(josh_attendee)
-        
-        dorrie_attendee = ReservationAttendee(
-            reservation_id=josh_reservation.id,
-            member_id=dorrie_member.id,
-            name=dorrie_member.name,
-            attendee_type="member",
-            dietary_restrictions=dorrie_member.dietary_restrictions
-        )
-        db.add(dorrie_attendee)
-        
-        guest_attendee = ReservationAttendee(
-            reservation_id=josh_reservation.id,
-            member_id=None,
-            name="Uncle Bob",
-            attendee_type="guest",
-            dietary_restrictions=None
-        )
-        db.add(guest_attendee)
-        print(f"   └─ Josh's reservation: Josh, Dorrie, Uncle Bob (3 attendees)")
-        
-        # Sarah's reservation: Sarah + Reed
-        sarah_attendee_self = ReservationAttendee(
-            reservation_id=sarah_reservation.id,
-            member_id=sarah_member.id,
-            name=sarah_member.name,
-            attendee_type="member",
-            dietary_restrictions=sarah_member.dietary_restrictions
-        )
-        db.add(sarah_attendee_self)
-        
-        reed_attendee = ReservationAttendee(
-            reservation_id=sarah_reservation.id,
-            member_id=reed_member.id,
-            name=reed_member.name,
-            attendee_type="member",
-            dietary_restrictions=reed_member.dietary_restrictions
-        )
-        db.add(reed_attendee)
-        print(f"   └─ Sarah's reservation: Sarah, Reed (2 attendees)")
-        
-        db.commit()
+            # APPLY FEES BASED ON LOGIC (With Pylance null-checks)
+            # 1. Peak Surcharge (Friday or Saturday)
+            if res_date.weekday() in [4, 5]:
+                peak_rule = db.query(Rule).filter_by(code="peak_hours").first()
+                if peak_rule:
+                    db.add(Fee(
+                        reservation_id=res.id, 
+                        rule_id=peak_rule.id, 
+                        calculated_amount=peak_rule.base_amount, 
+                        paid=False
+                    ))
 
-        # ============================================================
-        # FEE RULES (Infrastructure)
-        # ============================================================
-        print("\n💰 Creating fee rules...")
-        
-        rules_data = [
-            {
-                "code": "no_call_no_show",
-                "name": "No Call No Show Fee",
-                "description": "Applied when customer doesn't show up or cancel",
-                "fee_type": "flat",
-                "base_amount": 40.0,
-                "threshold": None,
-                "enabled": True
-            },
-            {
-                "code": "peak_hours",
-                "name": "Peak Hours Surcharge",
-                "description": "Additional fee for Friday/Saturday dinner",
-                "fee_type": "flat",
-                "base_amount": 15.0,
-                "threshold": None,
-                "enabled": True
-            },
-            {
-                "code": "large_party",
-                "name": "Large Party Fee",
-                "description": "Applied for parties of 6 or more",
-                "fee_type": "per_person",
-                "base_amount": 10.0,
-                "threshold": 6,
-                "enabled": True
-            },
-            {
-                "code": "cancellation",
-                "name": "Late Cancellation Fee",
-                "description": "Cancellation within 24 hours",
-                "fee_type": "percentage",
-                "base_amount": 50.0,  # 50%
-                "threshold": None,
-                "enabled": True
-            },
-        ]
-        
-        for rule_data in rules_data:
-            rule = Rule(**rule_data)
-            db.add(rule)
-            print(f"   └─ {rule.name} (${rule.base_amount})")
-        
-        db.commit()
+            # 2. Large Party Fee (>= 6 attendees)
+            if party_count >= 6:
+                lp_rule = db.query(Rule).filter_by(code="large_party").first()
+                if lp_rule:
+                    db.add(Fee(
+                        reservation_id=res.id, 
+                        rule_id=lp_rule.id, 
+                        quantity=party_count, 
+                        calculated_amount=lp_rule.base_amount * party_count, 
+                        paid=False
+                    ))
 
-        # ============================================================
-        # SAMPLE FEES
-        # ============================================================
-        print("\n💵 Applying sample fees...")
-        
-        # Apply peak hours fee to Josh's dinner reservation
-        peak_hours_rule = db.query(Rule).filter(Rule.code == "peak_hours").first()
-        josh_peak_fee = Fee(
-            reservation_id=josh_reservation.id,
-            rule_id=peak_hours_rule.id, # type: ignore
-            quantity=None,
-            calculated_amount=15.0,
-            paid=False
-        )
-        db.add(josh_peak_fee)
-        print(f"   └─ Applied ${peak_hours_rule.base_amount} peak hours fee to Josh's reservation") # type: ignore
-        
-        # Apply large party fee to Josh's reservation (3 attendees, so actually doesn't meet threshold)
-        # But let's apply it as an example
-        large_party_rule = db.query(Rule).filter(Rule.code == "large_party").first()
-        josh_party_fee = Fee(
-            reservation_id=josh_reservation.id,
-            rule_id=large_party_rule.id, # type: ignore
-            quantity=3,  # 3 attendees
-            calculated_amount=30.0,  # $10 x 3
-            paid=False
-        )
-        db.add(josh_party_fee)
-        print(f"   └─ Applied ${30.0} large party fee to Josh's reservation")
-        
         db.commit()
-        
-        
-        # ============================================================
-        # SUCCESS MESSAGE (moved to end)
-        # ============================================================
-        print("\n" + "="*50)
-        print("🎉 Database seeded successfully!")
-        print("="*50)
-        print("\n📧 Login credentials:")
-        print("   Josh:  josh@josh.com / 1111")
-        print("   Sarah: sarah@sarah.com / 1111")
-        print("\n")
-        
+        print("\n🎉 Database seeded successfully with meaningful data and fees!")
+
     except Exception as e:
-        print(f"❌ Error seeding database: {e}")
         db.rollback()
+        print(f"❌ Error seeding database: {e}")
         raise
     finally:
         db.close()
 
-
 if __name__ == "__main__":
-    # Confirm before destroying data
     response = input("⚠️  This will DELETE all data. Continue? (yes/no): ")
     if response.lower() == "yes":
         seed_database()

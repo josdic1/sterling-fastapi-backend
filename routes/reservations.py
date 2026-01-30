@@ -1,3 +1,4 @@
+# routes/reservations.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import get_db
@@ -56,7 +57,6 @@ def create_reservation(
     db.refresh(new_res)
 
     # 3. AUTO-ADD THE USER AS THE FIRST ATTENDEE
-    # We find the member record linked to this login so they aren't "blank"
     creator_member = db.query(Member).filter(Member.user_id == current_user.id).first()
     if creator_member:
         attendee = ReservationAttendee(
@@ -69,11 +69,41 @@ def create_reservation(
         db.add(attendee)
         db.commit()
 
-    return new_res
+    # Return with attendee count
+    return {
+        "id": new_res.id,
+        "created_by_id": new_res.created_by_id,
+        "dining_room_id": new_res.dining_room_id,
+        "time_slot_id": new_res.time_slot_id,
+        "date": new_res.date,
+        "notes": new_res.notes,
+        "status": new_res.status,
+        "created_at": new_res.created_at,
+        "attendee_count": len(new_res.attendees)
+    }
 
 @router.get("/", response_model=list[ReservationResponse])
 def get_my_reservations(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return db.query(Reservation).filter(Reservation.created_by_id == current_user.id).order_by(Reservation.date.desc()).all()
+    reservations = db.query(Reservation).filter(
+        Reservation.created_by_id == current_user.id
+    ).order_by(Reservation.date.desc()).all()
+    
+    # Build response with attendee counts
+    result = []
+    for res in reservations:
+        result.append({
+            "id": res.id,
+            "created_by_id": res.created_by_id,
+            "dining_room_id": res.dining_room_id,
+            "time_slot_id": res.time_slot_id,
+            "date": res.date,
+            "notes": res.notes,
+            "status": res.status,
+            "created_at": res.created_at,
+            "attendee_count": len(res.attendees)  # ← COUNT ATTENDEES
+        })
+    
+    return result
 
 @router.get("/{reservation_id}", response_model=ReservationDetailResponse)
 def get_reservation(reservation_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -84,8 +114,8 @@ def get_reservation(reservation_id: int, current_user: User = Depends(get_curren
     return {
         "id": res.id,
         "created_by_id": res.created_by_id,
-        "dining_room_id": res.dining_room_id,  # ← ADD THIS
-        "time_slot_id": res.time_slot_id,      # ← ADD THIS
+        "dining_room_id": res.dining_room_id,
+        "time_slot_id": res.time_slot_id,
         "date": res.date,
         "notes": res.notes,
         "status": res.status,
@@ -105,13 +135,23 @@ def update_reservation(reservation_id: int, update: ReservationUpdate, current_u
     if not res:
         raise HTTPException(status_code=404, detail="Not found")
     
-    # Standard update logic
     for key, value in update.model_dump(exclude_unset=True).items():
         setattr(res, key, value)
     
     db.commit()
     db.refresh(res)
-    return res
+    
+    return {
+        "id": res.id,
+        "created_by_id": res.created_by_id,
+        "dining_room_id": res.dining_room_id,
+        "time_slot_id": res.time_slot_id,
+        "date": res.date,
+        "notes": res.notes,
+        "status": res.status,
+        "created_at": res.created_at,
+        "attendee_count": len(res.attendees)
+    }
 
 @router.delete("/{reservation_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_reservation(reservation_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
