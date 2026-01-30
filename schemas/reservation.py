@@ -42,6 +42,8 @@ class ReservationDetailResponse(BaseModel):
     """Detailed response with nested objects"""
     id: int
     created_by_id: int
+    dining_room_id: int  # ADD THIS
+    time_slot_id: int    # ADD THIS
     date: date_type
     notes: str | None
     status: str
