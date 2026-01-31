@@ -6,4 +6,6 @@ __pycache__/
 instance/
 .DS_Store
 *.sqlite
-*.sqlite3" > .gitignore
+*.sqlite3" > .gitignore.env
+.env.local
+.env.production
