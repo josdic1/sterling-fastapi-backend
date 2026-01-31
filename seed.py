@@ -4,11 +4,11 @@ from database import SessionLocal, engine, Base
 from models.user import User
 from models.member import Member
 from models.dining_room import DiningRoom
-from models.time_slot import TimeSlot
 from models.reservation import Reservation
 from models.reservation_attendee import ReservationAttendee
 from models.rule import Rule
 from models.fee import Fee
+from routes.reservations import apply_automatic_fees
 
 # Meaningful data pools for randomized content
 REAL_GUESTS = ["Uncle Bob", "Aunt May", "Cousin Vinny", "The Neighbors", "Work Team", "Client Group", "The Johnsons"]
@@ -94,7 +94,7 @@ def seed_database():
                 all_members.append(member)
         
         # ============================================================
-        # 2. INFRASTRUCTURE (Unchanged)
+        # 2. INFRASTRUCTURE
         # ============================================================
         print("🏛️  Creating Infrastructure...")
         rooms = [
@@ -106,20 +106,14 @@ def seed_database():
         ]
         db.add_all(rooms)
         
-        slots = [
-            TimeSlot(name="Breakfast", start_time=time(8,0), end_time=time(11,0)),
-            TimeSlot(name="Lunch", start_time=time(12,0), end_time=time(15,0)),
-            TimeSlot(name="Dinner", start_time=time(18,0), end_time=time(21,0)),
-            TimeSlot(name="Late Night", start_time=time(21,0), end_time=time(23,30))
-        ]
-        db.add_all(slots)
-
         rules = [
             Rule(code="no_call_no_show", name="No Call No Show Fee", base_amount=40.0, fee_type="flat", enabled=True),
             Rule(code="peak_hours", name="Peak Hours Surcharge", base_amount=15.0, fee_type="flat", enabled=True),
-            Rule(code="large_party", name="Large Party Fee", base_amount=10.0, threshold=6, fee_type="per_person", enabled=True),
+            Rule(code="excess_member_guests", name="Excess Guest Fee", description="$15 per guest beyond member allowance (4 guests per member)", base_amount=15.0, fee_type="per_person", enabled=True),
+            Rule(code="excess_occupancy", name="Occupancy Overage Fee", description="$15 per guest when total party exceeds 12 people", base_amount=15.0, threshold=12, fee_type="per_person", enabled=True),
             Rule(code="cancellation", name="Late Cancellation Fee", base_amount=50.0, fee_type="percentage", enabled=True),
         ]
+        
         db.add_all(rules)
         db.flush()
 
@@ -127,15 +121,44 @@ def seed_database():
         # 3. RANDOMIZED RESERVATIONS + FEES (20 Total)
         # ============================================================
         print("📅 Generating 20 randomized reservations...")
+        
+        # Time slot options (start_time, end_time)
+        lunch_times = [
+            (time(11, 0), time(13, 0)),
+            (time(11, 15), time(13, 15)),
+            (time(11, 30), time(13, 30)),
+            (time(11, 45), time(13, 45)),
+            (time(12, 0), time(14, 0)),
+        ]
+        
+        dinner_times = [
+            (time(16, 0), time(18, 0)),
+            (time(16, 30), time(18, 30)),
+            (time(17, 0), time(19, 0)),
+            (time(17, 30), time(19, 30)),
+            (time(18, 0), time(20, 0)),
+            (time(18, 30), time(20, 30)),
+        ]
+        
         for _ in range(20):
             creator = random.choice(all_users)
-            res_date = date.today() + timedelta(days=random.randint(1, 30))
+            res_date = date.today() + timedelta(days=random.randint(1, 60))
+            
+            # Pick meal type and time slot
+            if random.random() < 0.5:
+                meal_type = "lunch"
+                start_time, end_time = random.choice(lunch_times)
+            else:
+                meal_type = "dinner"
+                start_time, end_time = random.choice(dinner_times)
             
             res = Reservation(
                 created_by_id=creator.id,
                 dining_room_id=random.choice(rooms).id,
-                time_slot_id=random.choice(slots).id,
                 date=res_date,
+                meal_type=meal_type,
+                start_time=start_time,
+                end_time=end_time,
                 notes=random.choice(REAL_NOTES),
                 status="confirmed"
             )
@@ -143,50 +166,34 @@ def seed_database():
             db.flush()
 
             # Add attendees
-            party_count = 0
             creator_members = [m for m in all_members if m.user_id == creator.id]
             for m in creator_members:
                 if random.random() > 0.2: 
                     db.add(ReservationAttendee(
-                        reservation_id=res.id, member_id=m.id, name=m.name,
-                        attendee_type="member", dietary_restrictions=m.dietary_restrictions
+                        reservation_id=res.id, 
+                        member_id=m.id, 
+                        name=m.name,
+                        attendee_type="member", 
+                        dietary_restrictions=m.dietary_restrictions
                     ))
-                    party_count += 1
 
             # Add randomized guests
-            for _ in range(random.randint(0, 4)):
+            for _ in range(random.randint(0, 6)):
                 db.add(ReservationAttendee(
-                    reservation_id=res.id, member_id=None, name=random.choice(REAL_GUESTS),
-                    attendee_type="guest", dietary_restrictions=None
+                    reservation_id=res.id, 
+                    member_id=None, 
+                    name=random.choice(REAL_GUESTS),
+                    attendee_type="guest", 
+                    dietary_restrictions=None
                 ))
-                party_count += 1
 
-            # APPLY FEES BASED ON LOGIC (With Pylance null-checks)
-            # 1. Peak Surcharge (Friday or Saturday)
-            if res_date.weekday() in [4, 5]:
-                peak_rule = db.query(Rule).filter_by(code="peak_hours").first()
-                if peak_rule:
-                    db.add(Fee(
-                        reservation_id=res.id, 
-                        rule_id=peak_rule.id, 
-                        calculated_amount=peak_rule.base_amount, 
-                        paid=False
-                    ))
-
-            # 2. Large Party Fee (>= 6 attendees)
-            if party_count >= 6:
-                lp_rule = db.query(Rule).filter_by(code="large_party").first()
-                if lp_rule:
-                    db.add(Fee(
-                        reservation_id=res.id, 
-                        rule_id=lp_rule.id, 
-                        quantity=party_count, 
-                        calculated_amount=lp_rule.base_amount * party_count, 
-                        paid=False
-                    ))
+            db.flush()  # Make sure attendees are saved
+            
+            # USE THE AUTOMATIC FEE FUNCTION
+            apply_automatic_fees(db, res)
 
         db.commit()
-        print("\n🎉 Database seeded successfully with meaningful data and fees!")
+        print("\n🎉 Database seeded successfully!")
 
     except Exception as e:
         db.rollback()

@@ -1,11 +1,11 @@
-# models/reservation.py
 """
 Reservation model - a booking for a dining room at a specific time.
 """
-from sqlalchemy import String, Integer, Text, Date, DateTime, ForeignKey
+from sqlalchemy import String, Integer, Text, Date, DateTime, Time, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime, timezone
 from datetime import date as date_type
+from datetime import time as time_type
 from database import Base
 
 
@@ -27,15 +27,12 @@ class Reservation(Base):
         nullable=False,
         index=True
     )
-    time_slot_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("time_slots.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True
-    )
     
     # Reservation details
     date: Mapped[date_type] = mapped_column(Date, nullable=False, index=True)
+    meal_type: Mapped[str] = mapped_column(String(20), nullable=False)  # NEW - 'lunch' or 'dinner'
+    start_time: Mapped[time_type] = mapped_column(Time, nullable=False)
+    end_time: Mapped[time_type] = mapped_column(Time, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="confirmed", nullable=False, index=True)
     
@@ -50,9 +47,8 @@ class Reservation(Base):
     # Relationships
     created_by: Mapped["User"] = relationship("User", back_populates="reservations")  # type: ignore
     dining_room: Mapped["DiningRoom"] = relationship("DiningRoom")  # type: ignore
-    time_slot: Mapped["TimeSlot"] = relationship("TimeSlot")  # type: ignore
     attendees: Mapped[list["ReservationAttendee"]] = relationship("ReservationAttendee", back_populates="reservation", cascade="all, delete-orphan")  # type: ignore
     fees: Mapped[list["Fee"]] = relationship("Fee", back_populates="reservation", cascade="all, delete-orphan")  # type: ignore
     
     def __repr__(self) -> str:
-        return f"<Reservation(id={self.id}, room={self.dining_room_id}, date={self.date}, status={self.status})>"
+        return f"<Reservation(id={self.id}, room={self.dining_room_id}, date={self.date}, meal={self.meal_type}, status={self.status})>"

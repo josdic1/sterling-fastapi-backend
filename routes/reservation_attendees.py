@@ -11,6 +11,7 @@ from models.member import Member
 from models.reservation_attendee import ReservationAttendee
 from schemas.reservation_attendee import AttendeeCreate, AttendeeResponse
 from utils.auth import get_current_user
+from routes.reservations import apply_automatic_fees
 
 router = APIRouter()
 
@@ -77,7 +78,7 @@ def add_attendee(
             member_id=member.id,
             name=member.name,
             attendee_type="member",
-            dietary_restrictions=member.dietary_restrictions  # Inherit from member
+            dietary_restrictions=member.dietary_restrictions
         )
     
     # Case 2: Adding a one-time guest
@@ -93,6 +94,9 @@ def add_attendee(
     db.add(new_attendee)
     db.commit()
     db.refresh(new_attendee)
+    
+    # TRIGGER FEE RECALCULATION
+    apply_automatic_fees(db, reservation)
     
     return new_attendee
 
@@ -163,5 +167,8 @@ def remove_attendee(
     
     db.delete(attendee)
     db.commit()
+    
+    # TRIGGER FEE RECALCULATION
+    apply_automatic_fees(db, reservation)
     
     return None
