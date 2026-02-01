@@ -23,7 +23,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:8081",
-        "https://sterling-react-frontend.vercel.app",  # ADD THIS
+        "https://sterling-react-frontend.vercel.app",
+        "https://resilient-cranachan-dfb539.netlify.app",  # ADD THIS
     ],
     allow_credentials=True,
     allow_methods=["*"],
