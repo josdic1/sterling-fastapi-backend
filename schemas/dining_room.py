@@ -1,14 +1,20 @@
-# schemas/dining_room.py
-"""
-Pydantic schemas for Dining Room
-"""
-from pydantic import BaseModel, ConfigDict
+# config.py
+import os
+from dotenv import load_dotenv
+
+load_dotenv()  # local only, harmless in Railway
 
 
-class DiningRoomResponse(BaseModel):
-    """What we send back to users"""
-    id: int
-    name: str
-    capacity: int
-    
-    model_config = ConfigDict(from_attributes=True)
+class Settings:
+    DATABASE_URL: str = os.environ["DATABASE_URL"]
+    SECRET_KEY: str = os.environ["SECRET_KEY"]
+
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRATION_MINUTES: int = 60 * 24
+
+    APP_TITLE: str = "Catering Booking API"
+    APP_DESCRIPTION: str = "Book catering events with ease"
+    APP_VERSION: str = "1.0.0"
+
+
+settings = Settings()
