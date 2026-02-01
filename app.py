@@ -45,4 +45,7 @@ def home():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8080, reload=True)
+    import os
+    # Default to 8080 locally, but use Railway's $PORT if available
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)
