@@ -1,12 +1,25 @@
-echo "*.env
-venv/
-__pycache__/
-*.pyc
-*.db
-instance/
-.DS_Store
-*.sqlite
-*.sqlite3" > .gitignore.env
+# Environments and Secrets
 .env
 .env.local
 .env.production
+.env.*
+
+# Python
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Databases (Prevents overwriting production data)
+*.db
+*.sqlite
+*.sqlite3
+instance/
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp
