@@ -22,12 +22,15 @@ app = FastAPI(
 origins = [
     "http://localhost:8081",
     "http://localhost:5173",
-    "https://sterling-client-demo.netlify.app", # Your NEW custom URL
+    "https://sterling-client-demo.netlify.app",
+    # This regex allow-list is the "pro" way to handle Netlify previews:
+    "https://.*--sterling-client-demo.netlify.app", 
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    # Use allow_origin_regex for previews, or just set allow_origins=["*"] for testing
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
