@@ -43,9 +43,9 @@ app.include_router(fees_router, prefix="/reservations", tags=["Fees"])
 def home():
     return {"message": "Sterling Catering API"}
 
-# if __name__ == "__main__":
-#     import uvicorn
-#     import os
-#     # Default to 8080 locally, but use Railway's $PORT if available
-#     port = int(os.environ.get("PORT", 8080))
-#     uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)
+if __name__ == "__main__":
+    import uvicorn
+    import os
+    # Default to 8080 locally, but use Railway's $PORT if available
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)
