@@ -1,3 +1,4 @@
+# app.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
@@ -10,31 +11,24 @@ from routes.reservation_attendees import router as reservation_attendees_router
 from routes.rules import router as rules_router
 from routes.fees import router as fees_router
 
+Base.metadata.create_all(bind=engine)
+
 app = FastAPI(
     title="Sterling Catering API",
+    description="Premium catering booking system with dynamic fee management",
     version="1.0.0"
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://sterling-react-frontend.vercel.app",
-        "http://localhost:5173",  # dev
+        "http://localhost:8081",
+        "https://sterling-react-frontend.vercel.app",  # ADD THIS
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.on_event("startup")
-def on_startup():
-    try:
-        print("🚀 Initializing database tables...")
-        Base.metadata.create_all(bind=engine)
-        print("✅ Database ready")
-    except Exception as e:
-        print("❌ Database not ready. App will still start.")
-        print(e)
 
 app.include_router(user_router, prefix="/users", tags=["Users"])
 app.include_router(members_router, prefix="/members", tags=["Members"])
@@ -51,6 +45,4 @@ def home():
 
 if __name__ == "__main__":
     import uvicorn
-    import os
-    port = int(os.environ.get("PORT", 8080))
-    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("app:app", host="0.0.0.0", port=8080, reload=True)

@@ -25,24 +25,20 @@ def create_reservation(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # 1. Validations
     dining_room = db.query(DiningRoom).filter(DiningRoom.id == reservation_in.dining_room_id).first()
     if not dining_room:
         raise HTTPException(status_code=404, detail="Dining room not found")
     
-    # Check for overlapping reservations
     existing = db.query(Reservation).filter(
         Reservation.dining_room_id == reservation_in.dining_room_id,
         Reservation.date == reservation_in.date,
         Reservation.status == "confirmed"
     ).all()
     
-    # Check if new reservation overlaps with any existing
     for res in existing:
         if not (reservation_in.end_time <= res.start_time or reservation_in.start_time >= res.end_time):
             raise HTTPException(status_code=409, detail="This time slot overlaps with an existing booking")
 
-    # 2. Create Reservation
     new_res = Reservation(
         created_by_id=current_user.id,
         dining_room_id=reservation_in.dining_room_id,
@@ -57,7 +53,6 @@ def create_reservation(
     db.commit()
     db.refresh(new_res)
 
-    # 3. AUTO-ADD THE USER AS THE FIRST ATTENDEE
     creator_member = db.query(Member).filter(Member.user_id == current_user.id).first()
     if creator_member:
         attendee = ReservationAttendee(
@@ -71,10 +66,8 @@ def create_reservation(
         db.commit()
         db.refresh(new_res)
 
-    # 4. AUTO-APPLY FEES
     apply_automatic_fees(db, new_res)
 
-    # Return with attendee count
     return {
         "id": new_res.id,
         "created_by_id": new_res.created_by_id,
@@ -95,7 +88,6 @@ def get_my_reservations(current_user: User = Depends(get_current_user), db: Sess
         Reservation.created_by_id == current_user.id
     ).order_by(Reservation.date.desc()).all()
     
-    # Build response with attendee counts
     result = []
     for res in reservations:
         result.append({
@@ -146,7 +138,6 @@ def update_reservation(reservation_id: int, update: ReservationUpdate, current_u
     db.commit()
     db.refresh(res)
     
-    # Reapply fees after update
     apply_automatic_fees(db, res)
     
     return {
@@ -173,14 +164,6 @@ def delete_reservation(reservation_id: int, current_user: User = Depends(get_cur
     return None
 
 def apply_automatic_fees(db: Session, reservation: Reservation):
-    """
-    Apply automatic fees based on rules:
-    1. Peak Hours: $15 flat fee on Friday/Saturday/Sunday
-    2. Excess Member Guests: $15 per guest beyond allowance (4 per member)
-    3. Excess Occupancy: $15 per guest when total exceeds 12
-    """
-    
-    # Get all attendees
     attendees = db.query(ReservationAttendee).filter_by(
         reservation_id=reservation.id
     ).all()
@@ -189,10 +172,8 @@ def apply_automatic_fees(db: Session, reservation: Reservation):
     member_attendees = [a for a in attendees if a.member_id is not None]
     guest_count = len([a for a in attendees if a.member_id is None])
     
-    # ============================================================
-    # 1. PEAK HOURS FEE - Friday/Saturday/Sunday
-    # ============================================================
-    peak_rule = db.query(Rule).filter_by(code="peak_hours", enabled=True).first()
+    # 1. PEAK HOURS
+    peak_rule = db.query(Rule).filter_by(code="peak_hours", enabled=1).first()
     if peak_rule and reservation.date.weekday() in [4, 5, 6]:
         existing = db.query(Fee).filter_by(
             reservation_id=reservation.id,
@@ -204,10 +185,9 @@ def apply_automatic_fees(db: Session, reservation: Reservation):
                 reservation_id=reservation.id,
                 rule_id=peak_rule.id,
                 calculated_amount=peak_rule.base_amount,
-                paid=False
+                paid=0
             ))
     else:
-        # Remove peak fee if moved to weekday
         if peak_rule:
             existing = db.query(Fee).filter_by(
                 reservation_id=reservation.id,
@@ -216,16 +196,13 @@ def apply_automatic_fees(db: Session, reservation: Reservation):
             if existing:
                 db.delete(existing)
     
-    # ============================================================
-    # 2. EXCESS MEMBER GUESTS - Beyond 4 per member allowance
-    # ============================================================
+    # 2. EXCESS MEMBER GUESTS
     excess_guest_rule = db.query(Rule).filter_by(
         code="excess_member_guests", 
-        enabled=True
+        enabled=1
     ).first()
     
     if excess_guest_rule:
-        # Calculate total allowed guests
         total_allowed_guests = 0
         for attendee in member_attendees:
             member = db.query(Member).filter_by(id=attendee.member_id).first()
@@ -249,18 +226,16 @@ def apply_automatic_fees(db: Session, reservation: Reservation):
                     rule_id=excess_guest_rule.id,
                     quantity=excess_guests,
                     calculated_amount=excess_guests * excess_guest_rule.base_amount,
-                    paid=False
+                    paid=0
                 ))
         else:
             if existing_fee:
                 db.delete(existing_fee)
     
-    # ============================================================
-    # 3. EXCESS OCCUPANCY - Beyond 12 total people
-    # ============================================================
+    # 3. EXCESS OCCUPANCY
     occupancy_rule = db.query(Rule).filter_by(
         code="excess_occupancy",
-        enabled=True
+        enabled=1
     ).first()
     
     if occupancy_rule:
@@ -281,7 +256,7 @@ def apply_automatic_fees(db: Session, reservation: Reservation):
                     rule_id=occupancy_rule.id,
                     quantity=excess_occupancy,
                     calculated_amount=excess_occupancy * occupancy_rule.base_amount,
-                    paid=False
+                    paid=0
                 ))
         else:
             if existing_fee:
