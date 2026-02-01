@@ -29,8 +29,11 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    # Use allow_origin_regex for previews, or just set allow_origins=["*"] for testing
-    allow_origins=["*"], 
+    allow_origin_regex=r"https://.*--sterling-client-demo\.netlify\.app",
+    allow_origins=[
+        "http://localhost:8081",
+        "https://sterling-client-demo.netlify.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
