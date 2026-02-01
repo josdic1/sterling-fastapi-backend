@@ -7,5 +7,6 @@ instance/
 .DS_Store
 *.sqlite
 *.sqlite3" > .gitignore.env
+.env
 .env.local
 .env.production
