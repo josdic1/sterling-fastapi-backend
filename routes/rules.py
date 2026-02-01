@@ -17,7 +17,8 @@ def get_rules(db: Session = Depends(get_db)):
     Get all fee rules.
     Public endpoint - users need to see what fees might apply.
     """
-    rules = db.query(Rule).filter(Rule.enabled == True).all()
+   
+    rules = db.query(Rule).filter(Rule.enabled == 1).all()
     return rules
 
 
