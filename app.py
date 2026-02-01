@@ -17,7 +17,10 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://sterling-react-frontend.vercel.app",
+        "http://localhost:5173",  # dev
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
