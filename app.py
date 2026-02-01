@@ -20,9 +20,9 @@ app = FastAPI(
 )
 
 origins = [
-    "http://localhost:8081",              # Your actual local React port
-    "http://localhost:5173",              # Standard Vite port (good to keep)
-    "https://sterling-client-demo.netlify.app", # Your new production URL
+    "http://localhost:8081",
+    "http://localhost:5173",
+    "https://sterling-client-demo.netlify.app", # Your NEW custom URL
 ]
 
 app.add_middleware(
