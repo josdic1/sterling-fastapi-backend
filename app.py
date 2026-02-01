@@ -19,6 +19,9 @@ app = FastAPI(
     version="1.0.0"
 )
 
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
 origins = [
     "http://localhost:8081",
     "http://localhost:5173",
