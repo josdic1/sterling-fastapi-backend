@@ -10,28 +10,29 @@ from routes.reservation_attendees import router as reservation_attendees_router
 from routes.rules import router as rules_router
 from routes.fees import router as fees_router
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
-
 app = FastAPI(
     title="Sterling Catering API",
-    description="Premium catering booking system with dynamic fee management",
     version="1.0.0"
 )
 
-# CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8081",
-        "https://sterling-react-frontend.vercel.app",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include Routers
+@app.on_event("startup")
+def on_startup():
+    try:
+        print("🚀 Initializing database tables...")
+        Base.metadata.create_all(bind=engine)
+        print("✅ Database ready")
+    except Exception as e:
+        print("❌ Database not ready. App will still start.")
+        print(e)
+
 app.include_router(user_router, prefix="/users", tags=["Users"])
 app.include_router(members_router, prefix="/members", tags=["Members"])
 app.include_router(dining_rooms_router, prefix="/dining-rooms", tags=["Dining Rooms"])
