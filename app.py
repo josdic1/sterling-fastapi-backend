@@ -1,4 +1,3 @@
-# app.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
@@ -11,6 +10,7 @@ from routes.reservation_attendees import router as reservation_attendees_router
 from routes.rules import router as rules_router
 from routes.fees import router as fees_router
 
+# Create database tables
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -19,17 +19,19 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:8081",
-        "https://sterling-react-frontend.vercel.app",  # ADD THIS
+        "https://sterling-react-frontend.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Include Routers
 app.include_router(user_router, prefix="/users", tags=["Users"])
 app.include_router(members_router, prefix="/members", tags=["Members"])
 app.include_router(dining_rooms_router, prefix="/dining-rooms", tags=["Dining Rooms"])
@@ -46,6 +48,6 @@ def home():
 if __name__ == "__main__":
     import uvicorn
     import os
-    # Default to 8080 locally, but use Railway's $PORT if available
+    # Uses Railway's $PORT or defaults to 8080
     port = int(os.environ.get("PORT", 8080))
     uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)
