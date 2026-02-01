@@ -19,13 +19,15 @@ app = FastAPI(
     version="1.0.0"
 )
 
+origins = [
+    "http://localhost:8081",              # Your actual local React port
+    "http://localhost:5173",              # Standard Vite port (good to keep)
+    "https://sterling-client-demo.netlify.app", # Your new production URL
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8081",
-        "https://sterling-react-frontend.vercel.app",
-        "https://resilient-cranachan-dfb539.netlify.app",  # ADD THIS
-    ],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
