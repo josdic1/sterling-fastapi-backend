@@ -21,7 +21,7 @@ def seed_database():
             {"email": "zach@zach.com", "name": "Zach Scott"},
             {"email": "gabe@gabe.com", "name": "Gabe Scott"},
             {"email": "ariel@ariel.com", "name": "Ariel Scott-Dicker"},
-            {"email": "sarah@sarah.com", "name": "Sara Scott"},
+            {"email": "sarah@sarah.com", "name": "Sarah Scott"},
             {"email": "jaime@jaime.com", "name": "Jaime Aker"},
             {"email": "brian@brian.com", "name": "Brian Kaiser"},
             {"email": "brandon@brandon.com", "name": "Brandon Kaiser"}
