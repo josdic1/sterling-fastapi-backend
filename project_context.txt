@@ -1,0 +1,2487 @@
+
+==================================================
+FILE: ./config.py
+==================================================
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv()  # safe locally
+
+class Settings:
+    DATABASE_URL: str = os.environ["DATABASE_URL"]
+    SECRET_KEY: str = os.environ["SECRET_KEY"]
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRATION_MINUTES: int = 60*24
+    APP_TITLE: str = "Sterling Catering API"
+    APP_DESCRIPTION: str = "Book catering events with ease"
+    APP_VERSION: str = "1.0.0"
+
+settings = Settings()
+
+
+==================================================
+FILE: ./requirements.txt
+==================================================
+
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anyio==4.12.1
+bcrypt==5.0.0
+blinker==1.9.0
+click==8.3.1
+dnspython==2.8.0
+email-validator==2.3.0
+fastapi==0.128.0
+Flask==3.1.2
+h11==0.16.0
+idna==3.11
+itsdangerous==2.2.0
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+peewee==3.19.0
+pydantic==2.12.5
+pydantic_core==2.41.5
+Pygments==2.19.2
+PyJWT==2.10.1
+python-dotenv==1.2.1
+SQLAlchemy==2.0.46
+sqlite-web==0.6.8
+starlette==0.50.0
+typing-inspection==0.4.2
+typing_extensions==4.15.0
+uvicorn==0.40.0
+Werkzeug==3.1.5
+psycopg2-binary==2.9.10
+dj-database-url
+
+==================================================
+FILE: ./database.py
+==================================================
+
+# database.py
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from config import settings
+
+if settings.DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(
+        settings.DATABASE_URL,
+        connect_args={"check_same_thread": False}
+    )
+else:
+    engine = create_engine(settings.DATABASE_URL)
+
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
+
+class Base(DeclarativeBase):
+    pass
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+==================================================
+FILE: ./README.md
+==================================================
+
+# fastapi-auth-template
+# sterling-fastapi
+# sterling-fastapi-backend
+# sterling-fastapi-backend
+
+
+==================================================
+FILE: ./seed.py
+==================================================
+
+import random
+from datetime import date, time, timedelta
+from database import SessionLocal, engine, Base
+from models.user import User
+from models.member import Member
+from models.dining_room import DiningRoom
+from models.rule import Rule
+
+def seed_database():
+    print("🗑️  Dropping all tables...")
+    Base.metadata.drop_all(bind=engine)
+    
+    print("🔨 Creating all tables...")
+    Base.metadata.create_all(bind=engine)
+    
+    db = SessionLocal()
+    try:
+        print("🌱 Seeding Users...")
+        users_data = [
+            {"email": "josh@josh.com", "name": "Josh Dicker"},
+            {"email": "zach@zach.com", "name": "Zach Scott"},
+            {"email": "gabe@gabe.com", "name": "Gabe Scott"},
+            {"email": "ariel@ariel.com", "name": "Ariel Scott-Dicker"},
+            {"email": "sarah@sarah.com", "name": "Sara Scott"},
+            {"email": "jaime@jaime.com", "name": "Jaime Aker"},
+            {"email": "brian@brian.com", "name": "Brian Kaiser"},
+            {"email": "brandon@brandon.com", "name": "Brandon Kaiser"}
+        ]
+
+        for u_info in users_data:
+            user = User(email=u_info["email"], name=u_info["name"], is_admin=False)
+            user.set_password("1111")
+            db.add(user)
+        
+        print("🏛️  Creating Dining Rooms...")
+        rooms = [
+            DiningRoom(name="Main Hall", capacity=100),
+            DiningRoom(name="Garden Room", capacity=50),
+            DiningRoom(name="Private Dining", capacity=20),
+            DiningRoom(name="Terrace", capacity=30),
+            DiningRoom(name="Wine Cellar", capacity=15)
+        ]
+        db.add_all(rooms)
+        
+        print("📜 Creating Fee Rules...")
+        rules = [
+            Rule(
+                code="no_call_no_show", 
+                name="No Call No Show Fee", 
+                base_amount=40.0, 
+                fee_type="flat", 
+                enabled=1
+            ),
+            Rule(
+                code="peak_hours", 
+                name="Peak Hours Surcharge", 
+                base_amount=15.0, 
+                fee_type="flat", 
+                enabled=1
+            ),
+            Rule(
+                code="excess_member_guests", 
+                name="Excess Guest Fee", 
+                description="$15 per guest beyond member allowance (4 guests per member)", 
+                base_amount=15.0, 
+                fee_type="per_person", 
+                enabled=1
+            ),
+            Rule(
+                code="excess_occupancy", 
+                name="Occupancy Overage Fee", 
+                description="$15 per guest when total party exceeds 12 people", 
+                base_amount=15.0, 
+                threshold=12, 
+                fee_type="per_person", 
+                enabled=1
+            ),
+            Rule(
+                code="cancellation", 
+                name="Late Cancellation Fee", 
+                base_amount=50.0, 
+                fee_type="percentage", 
+                enabled=1
+            ),
+        ]
+        
+        db.add_all(rules)
+        db.commit()
+        
+        print("\n🎉 Database seeded successfully!")
+        print("\n📋 Summary:")
+        print(f"  - {len(users_data)} users created (all with password: 1111)")
+        print(f"  - {len(rooms)} dining rooms created")
+        print(f"  - {len(rules)} fee rules created")
+        print("\n✅ Ready for you to add members, reservations, and attendees!")
+
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Error seeding database: {e}")
+        raise
+    finally:
+        db.close()
+
+if __name__ == "__main__":
+    response = input("⚠️  This will DELETE all data. Continue? (yes/no): ")
+    if response.lower() == "yes":
+        seed_database()
+    else:
+        print("❌ Seed cancelled.")
+
+==================================================
+FILE: ./.gitignore
+==================================================
+
+# Environments and Secrets
+.env
+.env.local
+.env.production
+.env.*
+
+# Python
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Databases (Prevents overwriting production data)
+*.db
+*.sqlite
+*.sqlite3
+instance/
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+==================================================
+FILE: ./.env
+==================================================
+
+DATABASE_URL=postgresql://postgres:nyzzIMmxVnlQWwHiClTDJswDAeQQnoDL@switchback.proxy.rlwy.net:48142/railway
+SECRET_KEY=sterling-secret-change-in-production
+PORT=8080
+
+==================================================
+FILE: ./app.py
+==================================================
+
+# app.py
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from database import engine, Base
+from routes.users import router as user_router
+from routes.members import router as members_router
+from routes.dining_rooms import router as dining_rooms_router
+from routes.time_slots import router as time_slots_router
+from routes.reservations import router as reservations_router
+from routes.reservation_attendees import router as reservation_attendees_router
+from routes.rules import router as rules_router
+from routes.fees import router as fees_router
+
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(
+    title="Sterling Catering API",
+    description="Premium catering booking system with dynamic fee management",
+    version="1.0.0"
+)
+
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
+origins = [
+    "http://localhost:8081",
+    "http://localhost:5173",
+    "https://sterling-client-demo.netlify.app",
+    # This regex allow-list is the "pro" way to handle Netlify previews:
+    "https://.*--sterling-client-demo.netlify.app", 
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"https://.*--sterling-client-demo\.netlify\.app",
+    allow_origins=[
+        "http://localhost:8081",
+        "https://sterling-client-demo.netlify.app"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(user_router, prefix="/users", tags=["Users"])
+app.include_router(members_router, prefix="/members", tags=["Members"])
+app.include_router(dining_rooms_router, prefix="/dining-rooms", tags=["Dining Rooms"])
+app.include_router(time_slots_router, prefix="/time-slots", tags=["Time Slots"])
+app.include_router(reservations_router, prefix="/reservations", tags=["Reservations"])
+app.include_router(reservation_attendees_router, prefix="/reservations", tags=["Reservation Attendees"])
+app.include_router(rules_router, prefix="/rules", tags=["Rules"])
+app.include_router(fees_router, prefix="/reservations", tags=["Fees"])
+
+@app.get("/", tags=["Health Check"])
+def home():
+    return {"message": "Sterling Catering API"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", host="0.0.0.0", port=8080, reload=True)
+
+==================================================
+FILE: ./project_context.txt
+==================================================
+
+
+==================================================
+FILE: ./config.py
+==================================================
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv()  # safe locally
+
+class Settings:
+    DATABASE_URL: str = os.environ["DATABASE_URL"]
+    SECRET_KEY: str = os.environ["SECRET_KEY"]
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRATION_MINUTES: int = 60*24
+    APP_TITLE: str = "Sterling Catering API"
+    APP_DESCRIPTION: str = "Book catering events with ease"
+    APP_VERSION: str = "1.0.0"
+
+settings = Settings()
+
+
+==================================================
+FILE: ./requirements.txt
+==================================================
+
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anyio==4.12.1
+bcrypt==5.0.0
+blinker==1.9.0
+click==8.3.1
+dnspython==2.8.0
+email-validator==2.3.0
+fastapi==0.128.0
+Flask==3.1.2
+h11==0.16.0
+idna==3.11
+itsdangerous==2.2.0
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+peewee==3.19.0
+pydantic==2.12.5
+pydantic_core==2.41.5
+Pygments==2.19.2
+PyJWT==2.10.1
+python-dotenv==1.2.1
+SQLAlchemy==2.0.46
+sqlite-web==0.6.8
+starlette==0.50.0
+typing-inspection==0.4.2
+typing_extensions==4.15.0
+uvicorn==0.40.0
+Werkzeug==3.1.5
+psycopg2-binary==2.9.10
+dj-database-url
+
+==================================================
+FILE: ./database.py
+==================================================
+
+# database.py
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from config import settings
+
+if settings.DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(
+        settings.DATABASE_URL,
+        connect_args={"check_same_thread": False}
+    )
+else:
+    engine = create_engine(settings.DATABASE_URL)
+
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
+
+class Base(DeclarativeBase):
+    pass
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+==================================================
+FILE: ./README.md
+==================================================
+
+# fastapi-auth-template
+# sterling-fastapi
+# sterling-fastapi-backend
+# sterling-fastapi-backend
+
+
+==================================================
+FILE: ./seed.py
+==================================================
+
+import random
+from datetime import date, time, timedelta
+from database import SessionLocal, engine, Base
+from models.user import User
+from models.member import Member
+from models.dining_room import DiningRoom
+from models.rule import Rule
+
+def seed_database():
+    print("🗑️  Dropping all tables...")
+    Base.metadata.drop_all(bind=engine)
+    
+    print("🔨 Creating all tables...")
+    Base.metadata.create_all(bind=engine)
+    
+    db = SessionLocal()
+    try:
+        print("🌱 Seeding Users...")
+        users_data = [
+            {"email": "josh@josh.com", "name": "Josh Dicker"},
+            {"email": "zach@zach.com", "name": "Zach Scott"},
+            {"email": "gabe@gabe.com", "name": "Gabe Scott"},
+            {"email": "ariel@ariel.com", "name": "Ariel Scott-Dicker"},
+            {"email": "sarah@sarah.com", "name": "Sara Scott"},
+            {"email": "jaime@jaime.com", "name": "Jaime Aker"},
+            {"email": "brian@brian.com", "name": "Brian Kaiser"},
+            {"email": "brandon@brandon.com", "name": "Brandon Kaiser"}
+        ]
+
+        for u_info in users_data:
+            user = User(email=u_info["email"], name=u_info["name"], is_admin=False)
+            user.set_password("1111")
+            db.add(user)
+        
+        print("🏛️  Creating Dining Rooms...")
+        rooms = [
+            DiningRoom(name="Main Hall", capacity=100),
+            DiningRoom(name="Garden Room", capacity=50),
+            DiningRoom(name="Private Dining", capacity=20),
+            DiningRoom(name="Terrace", capacity=30),
+            DiningRoom(name="Wine Cellar", capacity=15)
+        ]
+        db.add_all(rooms)
+        
+        print("📜 Creating Fee Rules...")
+        rules = [
+            Rule(
+                code="no_call_no_show", 
+                name="No Call No Show Fee", 
+                base_amount=40.0, 
+                fee_type="flat", 
+                enabled=1
+            ),
+            Rule(
+                code="peak_hours", 
+                name="Peak Hours Surcharge", 
+                base_amount=15.0, 
+                fee_type="flat", 
+                enabled=1
+            ),
+            Rule(
+                code="excess_member_guests", 
+                name="Excess Guest Fee", 
+                description="$15 per guest beyond member allowance (4 guests per member)", 
+                base_amount=15.0, 
+                fee_type="per_person", 
+                enabled=1
+            ),
+            Rule(
+                code="excess_occupancy", 
+                name="Occupancy Overage Fee", 
+                description="$15 per guest when total party exceeds 12 people", 
+                base_amount=15.0, 
+                threshold=12, 
+                fee_type="per_person", 
+                enabled=1
+            ),
+            Rule(
+                code="cancellation", 
+                name="Late Cancellation Fee", 
+                base_amount=50.0, 
+                fee_type="percentage", 
+                enabled=1
+            ),
+        ]
+        
+        db.add_all(rules)
+        db.commit()
+        
+        print("\n🎉 Database seeded successfully!")
+        print("\n📋 Summary:")
+        print(f"  - {len(users_data)} users created (all with password: 1111)")
+        print(f"  - {len(rooms)} dining rooms created")
+        print(f"  - {len(rules)} fee rules created")
+        print("\n✅ Ready for you to add members, reservations, and attendees!")
+
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Error seeding database: {e}")
+        raise
+    finally:
+        db.close()
+
+if __name__ == "__main__":
+    response = input("⚠️  This will DELETE all data. Continue? (yes/no): ")
+    if response.lower() == "yes":
+        seed_database()
+    else:
+        print("❌ Seed cancelled.")
+
+==================================================
+FILE: ./.gitignore
+==================================================
+
+# Environments and Secrets
+.env
+.env.local
+.env.production
+.env.*
+
+# Python
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Databases (Prevents overwriting production data)
+*.db
+*.sqlite
+*.sqlite3
+instance/
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+==================================================
+FILE: ./.env
+==================================================
+
+DATABASE_URL=postgresql://postgres:nyzzIMmxVnlQWwHiClTDJswDAeQQnoDL@switchback.proxy.rlwy.net:48142/railway
+SECRET_KEY=sterling-secret-change-in-production
+PORT=8080
+
+==================================================
+FILE: ./app.py
+==================================================
+
+# app.py
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from database import engine, Base
+from routes.users import router as user_router
+from routes.members import router as members_router
+from routes.dining_rooms import router as dining_rooms_router
+from routes.time_slots import router as time_slots_router
+from routes.reservations import router as reservations_router
+from routes.reservation_attendees import router as reservation_attendees_router
+from routes.rules import router as rules_router
+from routes.fees import router as fees_router
+
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(
+    title="Sterling Catering API",
+    description="Premium catering booking system with dynamic fee management",
+    version="1.0.0"
+)
+
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
+origins = [
+    "http://localhost:8081",
+    "http://localhost:5173",
+    "https://sterling-client-demo.netlify.app",
+    # This regex allow-list is the "pro" way to handle Netlify previews:
+    "https://.*--sterling-client-demo.netlify.app", 
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"https://.*--sterling-client-demo\.netlify\.app",
+    allow_origins=[
+        "http://localhost:8081",
+        "https://sterling-client-demo.netlify.app"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(user_router, prefix="/users", tags=["Users"])
+app.include_router(members_router, prefix="/members", tags=["Members"])
+app.include_router(dining_rooms_router, prefix="/dining-rooms", tags=["Dining Rooms"])
+app.include_router(time_slots_router, prefix="/time-slots", tags=["Time Slots"])
+app.include_router(reservations_router, prefix="/reservations", tags=["Reservations"])
+app.include_router(reservation_attendees_router, prefix="/reservations", tags=["Reservation Attendees"])
+app.include_router(rules_router, prefix="/rules", tags=["Rules"])
+app.include_router(fees_router, prefix="/reservations", tags=["Fees"])
+
+@app.get("/", tags=["Health Check"])
+def home():
+    return {"message": "Sterling Catering API"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", host="0.0.0.0", port=8080, reload=True)
+
+==================================================
+FILE: ./Procfile
+==================================================
+
+web: uvicorn app:app --host 0.0.0.0 --port $PORT
+
+
+==================================================
+FILE: ./migrations/__init__.py
+==================================================
+
+
+
+==================================================
+FILE: ./migrations/add_meal_type_to_reservations.py
+==================================================
+
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from sqlalchemy import text
+from database import engine
+
+def upgrade():
+    """Add meal_type column to reservations table"""
+    with engine.connect() as conn:
+        # Check if column already exists
+        result = conn.execute(text("PRAGMA table_info(reservations)"))
+        columns = [row[1] for row in result]
+        
+        if 'meal_type' not in columns:
+            # Add column
+            conn.execute(text("""
+                ALTER TABLE reservations 
+                ADD COLUMN meal_type VARCHAR
+            """))
+            print("✅ Added meal_type column")
+        else:
+            print("ℹ️  meal_type column already exists")
+        
+        # Set default values for existing records that don't have meal_type set
+        conn.execute(text("""
+            UPDATE reservations 
+            SET meal_type = CASE 
+                WHEN CAST(start_time AS TIME) >= '11:00:00' 
+                     AND CAST(start_time AS TIME) < '14:00:00' 
+                THEN 'lunch'
+                ELSE 'dinner'
+            END
+            WHERE meal_type IS NULL
+        """))
+        
+        conn.commit()
+    print("✅ Migration complete")
+
+if __name__ == "__main__":
+    upgrade()
+
+==================================================
+FILE: ./migrations/add_new_fee_rules.py
+==================================================
+
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from database import SessionLocal
+from models.rule import Rule
+
+def upgrade():
+    db = SessionLocal()
+    try:
+        # Check if rules already exist
+        excess_guests = db.query(Rule).filter_by(code="excess_member_guests").first()
+        excess_occupancy = db.query(Rule).filter_by(code="excess_occupancy").first()
+        
+        if not excess_guests:
+            db.add(Rule(
+                code="excess_member_guests",
+                name="Excess Guest Fee",
+                description="$15 per guest beyond member allowance (4 guests per member)",
+                base_amount=15.0,
+                fee_type="per_person",
+                threshold=None,
+                enabled=True
+            ))
+            print("✅ Added excess_member_guests rule")
+        
+        if not excess_occupancy:
+            db.add(Rule(
+                code="excess_occupancy",
+                name="Occupancy Overage Fee",
+                description="$15 per guest when total party exceeds 12 people",
+                base_amount=15.0,
+                fee_type="per_person",
+                threshold=12,
+                enabled=True
+            ))
+            print("✅ Added excess_occupancy rule")
+        
+        # Disable old large_party rule (don't delete, just disable)
+        old_rule = db.query(Rule).filter_by(code="large_party").first()
+        if old_rule:
+            old_rule.enabled = False
+            print("✅ Disabled old large_party rule")
+        
+        db.commit()
+        print("✅ All rules updated successfully")
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Error: {e}")
+        raise
+    finally:
+        db.close()
+
+if __name__ == "__main__":
+    upgrade()
+
+==================================================
+FILE: ./migrations/add_guest_allowance.py
+==================================================
+
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from sqlalchemy import text
+from database import engine
+
+def upgrade():
+    """Add guest_allowance column to members table"""
+    with engine.connect() as conn:
+        conn.execute(text("""
+            ALTER TABLE members 
+            ADD COLUMN guest_allowance INTEGER DEFAULT 4 NOT NULL
+        """))
+        conn.commit()
+    print("✅ Added guest_allowance column to members")
+
+def downgrade():
+    """Remove guest_allowance column"""
+    with engine.connect() as conn:
+        conn.execute(text("""
+            ALTER TABLE members 
+            DROP COLUMN guest_allowance
+        """))
+        conn.commit()
+    print("✅ Removed guest_allowance column")
+
+if __name__ == "__main__":
+    upgrade()
+
+==================================================
+FILE: ./utils/auth.py
+==================================================
+
+# utils/auth.py
+"""
+Authentication utilities - JWT token creation and verification
+"""
+import jwt
+from datetime import datetime, timedelta, timezone
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
+from config import settings
+from database import get_db
+from models.user import User
+
+# Security scheme for Swagger UI
+security = HTTPBearer()
+
+
+def create_access_token(user_id: int, is_admin: bool) -> str:
+    """Create a JWT token for a user."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRATION_MINUTES)
+    
+    payload = {
+        "user_id": user_id,
+        "is_admin": is_admin,
+        "exp": expire
+    }
+    
+    token = jwt.encode(
+        payload, 
+        settings.SECRET_KEY, 
+        algorithm=settings.JWT_ALGORITHM
+    )
+    
+    return token
+
+
+def decode_access_token(token: str) -> dict:
+    """Decode and verify a JWT token."""
+    try:
+        payload = jwt.decode(
+            token, 
+            settings.SECRET_KEY, 
+            algorithms=[settings.JWT_ALGORITHM]
+        )
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise ValueError("Token has expired")
+    except jwt.InvalidTokenError:
+        raise ValueError("Invalid token")
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+) -> User:
+    """
+    Dependency to get the current authenticated user.
+    Requires valid JWT token in Authorization header.
+    """
+    token = credentials.credentials
+    
+    try:
+        payload = decode_access_token(token)
+        user_id = payload.get("user_id")
+        
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials"
+            )
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found"
+            )
+        
+        return user
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+
+==================================================
+FILE: ./utils/__init__.py
+==================================================
+
+
+
+==================================================
+FILE: ./models/user.py
+==================================================
+
+from __future__ import annotations
+
+from sqlalchemy import String, Integer, Boolean, DateTime
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from datetime import datetime, timezone
+import bcrypt
+from database import Base
+
+
+class User(Base):
+    __tablename__ = "users"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), 
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+
+    # models/user.py
+    members: Mapped[list["Member"]] = relationship("Member", back_populates="user", cascade="all, delete-orphan")  # type: ignore
+    reservations: Mapped[list["Reservation"]] = relationship("Reservation", back_populates="created_by", cascade="all, delete-orphan")  # type: ignore
+
+    def set_password(self, password: str) -> None:
+        """Hashes the password using bcrypt."""
+        password_bytes = password.encode('utf-8')
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password_bytes, salt)
+        self.password_hash = hashed.decode('utf-8')
+    
+    def check_password(self, password: str) -> bool:
+        """Verifies a password against the stored hash."""
+        return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('utf-8'))
+
+==================================================
+FILE: ./models/reservation.py
+==================================================
+
+"""
+Reservation model - a booking for a dining room at a specific time.
+"""
+from sqlalchemy import String, Integer, Text, Date, DateTime, Time, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from datetime import datetime, timezone
+from datetime import date as date_type
+from datetime import time as time_type
+from database import Base
+
+
+class Reservation(Base):
+    __tablename__ = "reservations"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    
+    # Foreign keys
+    created_by_id: Mapped[int] = mapped_column(
+        Integer, 
+        ForeignKey("users.id", ondelete="CASCADE"), 
+        nullable=False,
+        index=True
+    )
+    dining_room_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("dining_rooms.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True
+    )
+    
+    # Reservation details
+    date: Mapped[date_type] = mapped_column(Date, nullable=False, index=True)
+    meal_type: Mapped[str] = mapped_column(String(20), nullable=False)  # NEW - 'lunch' or 'dinner'
+    start_time: Mapped[time_type] = mapped_column(Time, nullable=False)
+    end_time: Mapped[time_type] = mapped_column(Time, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="confirmed", nullable=False, index=True)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True
+    )
+    
+    # Relationships
+    created_by: Mapped["User"] = relationship("User", back_populates="reservations")  # type: ignore
+    dining_room: Mapped["DiningRoom"] = relationship("DiningRoom")  # type: ignore
+    attendees: Mapped[list["ReservationAttendee"]] = relationship("ReservationAttendee", back_populates="reservation", cascade="all, delete-orphan")  # type: ignore
+    fees: Mapped[list["Fee"]] = relationship("Fee", back_populates="reservation", cascade="all, delete-orphan")  # type: ignore
+    
+    def __repr__(self) -> str:
+        return f"<Reservation(id={self.id}, room={self.dining_room_id}, date={self.date}, meal={self.meal_type}, status={self.status})>"
+
+==================================================
+FILE: ./models/reservation_attendee.py
+==================================================
+
+# models/reservation_attendee.py
+"""
+Reservation Attendee model - tracks who is attending a reservation.
+Can be either a registered member OR a one-time guest.
+"""
+from sqlalchemy import String, Integer, Text, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from database import Base
+
+
+class ReservationAttendee(Base):
+    __tablename__ = "reservation_attendees"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    
+    # Foreign keys
+    reservation_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("reservations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    
+    # Optional - if this is a registered member
+    member_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("members.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
+    
+    # Required - name (from member OR guest)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    
+    # Attendee type: "member" or "guest"
+    attendee_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    
+    # Dietary restrictions - only for guests
+    # Members inherit from members table
+    dietary_restrictions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # Relationships
+    reservation: Mapped["Reservation"] = relationship("Reservation", back_populates="attendees")  # type: ignore
+    member: Mapped["Member | None"] = relationship("Member")  # type: ignore
+    
+    def __repr__(self) -> str:
+        return f"<ReservationAttendee(id={self.id}, name={self.name}, type={self.attendee_type})>"
+
+==================================================
+FILE: ./models/member.py
+==================================================
+
+"""
+Member model - represents family members who can attend reservations.
+"""
+from sqlalchemy import String, Integer, Text, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from database import Base
+
+
+class Member(Base):
+    __tablename__ = "members"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    
+    # Foreign keys
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    
+    # Member details
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    relation: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    dietary_restrictions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    guest_allowance: Mapped[int] = mapped_column(Integer, default=4, nullable=False)  # NEW
+    
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="members")  # type: ignore
+    reservation_attendees: Mapped[list["ReservationAttendee"]] = relationship("ReservationAttendee", back_populates="member")  # type: ignore
+    
+    def __repr__(self) -> str:
+        return f"<Member(id={self.id}, name={self.name}, relation={self.relation})>"
+
+==================================================
+FILE: ./models/__init__.py
+==================================================
+
+# models/__init__.py
+from models.user import User
+from models.member import Member
+from models.dining_room import DiningRoom
+from models.time_slot import TimeSlot
+from models.reservation import Reservation
+from models.reservation_attendee import ReservationAttendee
+from models.rule import Rule
+from models.fee import Fee
+
+__all__ = ["User", "Member", "DiningRoom", "TimeSlot", "Reservation", "ReservationAttendee", "Rule", "Fee"]
+
+==================================================
+FILE: ./models/fee.py
+==================================================
+
+# models/fee.py
+"""
+Fee model - a rule applied to a specific reservation with calculated amount.
+"""
+from sqlalchemy import Integer, Float, DateTime, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from datetime import datetime, timezone
+from database import Base
+
+
+class Fee(Base):
+    __tablename__ = "fees"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    
+    # Foreign keys
+    reservation_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("reservations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    rule_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("rules.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True
+    )
+    
+    # Fee calculation
+    quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)  # e.g., number of people for per_person fee
+    calculated_amount: Mapped[float] = mapped_column(Float, nullable=False)
+    override_amount: Mapped[float | None] = mapped_column(Float, nullable=True)  # Admin can override
+    
+    # Payment status
+    paid: Mapped[bool] = mapped_column(Integer, default=False, nullable=False)  # SQLite uses Integer for Boolean
+    
+    # Timestamp
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True
+    )
+    
+    # Relationships
+    reservation: Mapped["Reservation"] = relationship("Reservation", back_populates="fees")  # type: ignore
+    rule: Mapped["Rule"] = relationship("Rule")  # type: ignore
+    
+    @property
+    def final_amount(self) -> float:
+        """Returns override_amount if set, otherwise calculated_amount"""
+        return self.override_amount if self.override_amount is not None else self.calculated_amount
+    
+    def __repr__(self) -> str:
+        return f"<Fee(id={self.id}, reservation={self.reservation_id}, rule={self.rule_id}, amount=${self.final_amount})>"
+
+==================================================
+FILE: ./models/rule.py
+==================================================
+
+# models/rule.py
+"""
+Rule model - defines fee templates (no-call-no-show, peak hours, etc.)
+These are created by admins and applied to reservations as fees.
+"""
+from sqlalchemy import String, Integer, Float, Text
+from sqlalchemy.orm import Mapped, mapped_column
+from database import Base
+
+
+class Rule(Base):
+    __tablename__ = "rules"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    
+    # Rule identification
+    code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # Fee calculation
+    fee_type: Mapped[str] = mapped_column(String(20), nullable=False)  # "flat", "per_person", "percentage"
+    base_amount: Mapped[float] = mapped_column(Float, nullable=False)
+    threshold: Mapped[int | None] = mapped_column(Integer, nullable=True)  # e.g., "applies when party > 6"
+    
+    # Status
+    enabled: Mapped[bool] = mapped_column(Integer, default=True, nullable=False)  # SQLite uses Integer for Boolean
+    
+    def __repr__(self) -> str:
+        return f"<Rule(id={self.id}, code={self.code}, name={self.name})>"
+
+==================================================
+FILE: ./models/dining_room.py
+==================================================
+
+# models/dining_room.py
+from sqlalchemy import Integer, String
+from sqlalchemy.orm import Mapped, mapped_column
+from database import Base
+
+class DiningRoom(Base):
+    __tablename__ = "dining_rooms"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    capacity: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+==================================================
+FILE: ./models/time_slot.py
+==================================================
+
+# models/time_slot.py
+"""
+Time Slot model - recurring time blocks for reservations.
+These are static infrastructure - created by admin/seed only.
+"""
+from sqlalchemy import String, Integer, Time
+from sqlalchemy.orm import Mapped, mapped_column
+from datetime import time
+from database import Base
+
+
+class TimeSlot(Base):
+    __tablename__ = "time_slots"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(50), nullable=False)
+    start_time: Mapped[time] = mapped_column(Time, nullable=False)
+    end_time: Mapped[time] = mapped_column(Time, nullable=False)
+    
+    def __repr__(self) -> str:
+        return f"<TimeSlot(id={self.id}, name={self.name}, {self.start_time}-{self.end_time})>"
+
+==================================================
+FILE: ./schemas/user.py
+==================================================
+
+from pydantic import BaseModel, EmailStr, ConfigDict
+from datetime import datetime
+
+
+# What the user sends when registering
+class UserCreate(BaseModel):
+    email: EmailStr
+    name: str
+    password: str
+
+# What we send back to the user (Safe - no password!)
+class UserResponse(BaseModel):
+    id: int
+    email: EmailStr
+    name: str
+    is_admin: bool
+    created_at: datetime
+
+    # Tells Pydantic to read SQLAlchemy models as dicts
+    model_config = ConfigDict(from_attributes=True)
+
+class UserLogin(BaseModel):
+    """What the user sends when logging in"""
+    email: EmailStr
+    password: str
+
+
+# NEW: Login response (with token)
+class TokenResponse(BaseModel):
+    """What we send back after successful login"""
+    access_token: str
+    token_type: str = "bearer"
+    user: UserResponse  # Include user info too
+
+==================================================
+FILE: ./schemas/reservation.py
+==================================================
+
+"""
+Pydantic schemas for Reservation
+"""
+from pydantic import BaseModel, ConfigDict
+from datetime import datetime
+from datetime import date as date_type
+from datetime import time
+
+
+class ReservationCreate(BaseModel):
+    """What the user sends when creating a reservation"""
+    dining_room_id: int
+    date: date_type
+    meal_type: str  # NEW - 'lunch' or 'dinner'
+    start_time: time
+    end_time: time
+    notes: str | None = None
+
+
+class ReservationUpdate(BaseModel):
+    """What the user sends when updating a reservation"""
+    dining_room_id: int | None = None
+    date: date_type | None = None
+    meal_type: str | None = None  # NEW
+    start_time: time | None = None
+    end_time: time | None = None
+    notes: str | None = None
+    status: str | None = None
+
+
+class ReservationResponse(BaseModel):
+    """What we send back to the user"""
+    id: int
+    created_by_id: int
+    dining_room_id: int
+    date: date_type
+    meal_type: str  # NEW
+    start_time: time
+    end_time: time
+    notes: str | None
+    status: str
+    created_at: datetime
+    attendee_count: int = 0
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReservationDetailResponse(BaseModel):
+    """Detailed response with nested objects"""
+    id: int
+    created_by_id: int
+    dining_room_id: int
+    date: date_type
+    meal_type: str  # NEW
+    start_time: time
+    end_time: time
+    notes: str | None
+    status: str
+    created_at: datetime
+    
+    # Nested objects
+    dining_room: dict
+    
+    model_config = ConfigDict(from_attributes=True)
+
+==================================================
+FILE: ./schemas/reservation_attendee.py
+==================================================
+
+# schemas/reservation_attendee.py
+"""
+Pydantic schemas for Reservation Attendee
+"""
+from pydantic import BaseModel, ConfigDict
+
+
+class AttendeeCreate(BaseModel):
+    """
+    What the user sends when adding an attendee.
+    Either member_id (registered member) OR name (one-time guest).
+    """
+    member_id: int | None = None  # If adding a registered member
+    name: str | None = None        # If adding a one-time guest
+    dietary_restrictions: str | None = None  # Only for guests
+
+
+class AttendeeResponse(BaseModel):
+    """What we send back to the user"""
+    id: int
+    reservation_id: int
+    member_id: int | None
+    name: str
+    attendee_type: str  # "member" or "guest"
+    dietary_restrictions: str | None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+==================================================
+FILE: ./schemas/member.py
+==================================================
+
+# schemas/member.py
+"""
+Pydantic schemas for Member
+"""
+from pydantic import BaseModel, ConfigDict
+
+
+class MemberCreate(BaseModel):
+    """What the user sends when creating a member"""
+    name: str
+    relation: str | None = None
+    dietary_restrictions: str | None = None
+
+
+class MemberUpdate(BaseModel):
+    """What the user sends when updating a member"""
+    name: str | None = None
+    relation: str | None = None
+    dietary_restrictions: str | None = None
+
+
+class MemberResponse(BaseModel):
+    """What we send back to the user"""
+    id: int
+    user_id: int
+    name: str
+    relation: str | None
+    dietary_restrictions: str | None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+==================================================
+FILE: ./schemas/__init__.py
+==================================================
+
+
+
+==================================================
+FILE: ./schemas/fee.py
+==================================================
+
+# schemas/fee.py
+"""
+Pydantic schemas for Fee
+"""
+from pydantic import BaseModel, ConfigDict
+from datetime import datetime
+
+
+class FeeCreate(BaseModel):
+    """What the system/admin sends when applying a fee"""
+    rule_id: int
+    quantity: int | None = None
+    calculated_amount: float
+    override_amount: float | None = None
+
+
+class FeeUpdate(BaseModel):
+    """What admin sends when updating a fee"""
+    override_amount: float | None = None
+    paid: bool | None = None
+
+
+class FeeResponse(BaseModel):
+    """What we send back to users"""
+    id: int
+    reservation_id: int
+    rule_id: int
+    quantity: int | None
+    calculated_amount: float
+    override_amount: float | None
+    paid: bool
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FeeDetailResponse(BaseModel):
+    """Detailed response with rule information"""
+    id: int
+    reservation_id: int
+    quantity: int | None
+    calculated_amount: float
+    override_amount: float | None
+    paid: bool
+    created_at: datetime
+    
+    # Nested rule info
+    rule: dict  # {"id": 1, "code": "no_call_no_show", "name": "No Call No Show Fee", "base_amount": 40.0}
+    
+    model_config = ConfigDict(from_attributes=True)
+
+==================================================
+FILE: ./schemas/rule.py
+==================================================
+
+# schemas/rule.py
+"""
+Pydantic schemas for Rule
+"""
+from pydantic import BaseModel, ConfigDict
+
+
+class RuleCreate(BaseModel):
+    """What admin sends when creating a rule"""
+    code: str
+    name: str
+    description: str | None = None
+    fee_type: str  # "flat", "per_person", "percentage"
+    base_amount: float
+    threshold: int | None = None
+
+
+class RuleUpdate(BaseModel):
+    """What admin sends when updating a rule"""
+    code: str | None = None
+    name: str | None = None
+    description: str | None = None
+    fee_type: str | None = None
+    base_amount: float | None = None
+    threshold: int | None = None
+    enabled: bool | None = None
+
+
+class RuleResponse(BaseModel):
+    """What we send back to users"""
+    id: int
+    code: str
+    name: str
+    description: str | None
+    fee_type: str
+    base_amount: float
+    threshold: int | None
+    enabled: bool
+    
+    model_config = ConfigDict(from_attributes=True)
+
+==================================================
+FILE: ./schemas/dining_room.py
+==================================================
+
+# schemas/dining_room.py
+"""
+Pydantic schemas for Dining Room
+"""
+from pydantic import BaseModel, ConfigDict
+
+
+class DiningRoomResponse(BaseModel):
+    """What we send back to users"""
+    id: int
+    name: str
+    capacity: int
+    
+    model_config = ConfigDict(from_attributes=True)
+
+==================================================
+FILE: ./schemas/time_slot.py
+==================================================
+
+# schemas/time_slot.py
+"""
+Pydantic schemas for Time Slot
+"""
+from pydantic import BaseModel, ConfigDict
+from datetime import time
+
+
+class TimeSlotResponse(BaseModel):
+    """What we send back to users"""
+    id: int
+    name: str
+    start_time: time
+    end_time: time
+    
+    model_config = ConfigDict(from_attributes=True)
+
+==================================================
+FILE: ./routes/fees.py
+==================================================
+
+# routes/fees.py
+"""
+Fee routes - managing fees on reservations
+"""
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from database import get_db
+from models.user import User
+from models.reservation import Reservation
+from models.fee import Fee
+from models.rule import Rule
+from schemas.fee import FeeCreate, FeeDetailResponse
+from utils.auth import get_current_user
+
+router = APIRouter()
+
+
+@router.post("/{reservation_id}/fees", response_model=FeeDetailResponse, status_code=status.HTTP_201_CREATED)
+def apply_fee(
+    reservation_id: int,
+    fee_in: FeeCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Apply a fee to a reservation.
+    User can apply fees to their own reservations.
+    (In production, this might be admin-only or automatic)
+    """
+    # Verify reservation belongs to user
+    reservation = db.query(Reservation).filter(
+        Reservation.id == reservation_id,
+        Reservation.created_by_id == current_user.id
+    ).first()
+    
+    if not reservation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reservation not found"
+        )
+    
+    # Verify rule exists
+    rule = db.query(Rule).filter(Rule.id == fee_in.rule_id).first()
+    if not rule:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Rule not found"
+        )
+    
+    # Check if fee already applied
+    existing = db.query(Fee).filter(
+        Fee.reservation_id == reservation_id,
+        Fee.rule_id == fee_in.rule_id
+    ).first()
+    
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Fee '{rule.name}' already applied to this reservation"
+        )
+    
+    # Create fee
+    new_fee = Fee(
+        reservation_id=reservation_id,
+        rule_id=fee_in.rule_id,
+        quantity=fee_in.quantity,
+        calculated_amount=fee_in.calculated_amount,
+        override_amount=fee_in.override_amount,
+        paid=False
+    )
+    
+    db.add(new_fee)
+    db.commit()
+    db.refresh(new_fee)
+    
+    # Return detailed response with rule info
+    return {
+        "id": new_fee.id,
+        "reservation_id": new_fee.reservation_id,
+        "quantity": new_fee.quantity,
+        "calculated_amount": new_fee.calculated_amount,
+        "override_amount": new_fee.override_amount,
+        "paid": new_fee.paid,
+        "created_at": new_fee.created_at,
+        "rule": {
+            "id": rule.id,
+            "code": rule.code,
+            "name": rule.name,
+            "base_amount": rule.base_amount
+        }
+    }
+
+
+@router.get("/{reservation_id}/fees", response_model=list[FeeDetailResponse])
+def get_fees(
+    reservation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all fees for a reservation.
+    User can only view fees for their own reservations.
+    """
+    # Verify reservation belongs to user
+    reservation = db.query(Reservation).filter(
+        Reservation.id == reservation_id,
+        Reservation.created_by_id == current_user.id
+    ).first()
+    
+    if not reservation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reservation not found"
+        )
+    
+    fees = db.query(Fee).filter(Fee.reservation_id == reservation_id).all()
+    
+    # Build detailed responses
+    result = []
+    for fee in fees:
+        result.append({
+            "id": fee.id,
+            "reservation_id": fee.reservation_id,
+            "quantity": fee.quantity,
+            "calculated_amount": fee.calculated_amount,
+            "override_amount": fee.override_amount,
+            "paid": fee.paid,
+            "created_at": fee.created_at,
+            "rule": {
+                "id": fee.rule.id,
+                "code": fee.rule.code,
+                "name": fee.rule.name,
+                "base_amount": fee.rule.base_amount
+            }
+        })
+    
+    return result
+
+
+@router.delete("/{reservation_id}/fees/{fee_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_fee(
+    reservation_id: int,
+    fee_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Remove a fee from a reservation.
+    User can remove fees from their own reservations.
+    """
+    # Verify reservation belongs to user
+    reservation = db.query(Reservation).filter(
+        Reservation.id == reservation_id,
+        Reservation.created_by_id == current_user.id
+    ).first()
+    
+    if not reservation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reservation not found"
+        )
+    
+    # Find and delete fee
+    fee = db.query(Fee).filter(
+        Fee.id == fee_id,
+        Fee.reservation_id == reservation_id
+    ).first()
+    
+    if not fee:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Fee not found"
+        )
+    
+    db.delete(fee)
+    db.commit()
+    
+    return None
+
+==================================================
+FILE: ./routes/members.py
+==================================================
+
+# routes/members.py
+"""
+Member routes - managing members under a user account
+"""
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from database import get_db
+from models.user import User
+from models.member import Member
+from schemas.member import MemberCreate, MemberUpdate, MemberResponse
+from utils.auth import get_current_user
+
+router = APIRouter()
+
+
+@router.post("/", response_model=MemberResponse, status_code=status.HTTP_201_CREATED)
+def create_member(
+    member_in: MemberCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new member under the current user's account."""
+    new_member = Member(
+        user_id=current_user.id,
+        name=member_in.name,
+        relation=member_in.relation,
+        dietary_restrictions=member_in.dietary_restrictions
+    )
+    
+    db.add(new_member)
+    db.commit()
+    db.refresh(new_member)
+    
+    return new_member
+
+
+@router.get("/", response_model=list[MemberResponse])
+def get_my_members(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all members belonging to the current user."""
+    members = db.query(Member).filter(Member.user_id == current_user.id).all()
+    return members
+
+
+@router.get("/{member_id}", response_model=MemberResponse)
+def get_member(
+    member_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get a specific member by ID."""
+    member = db.query(Member).filter(
+        Member.id == member_id,
+        Member.user_id == current_user.id
+    ).first()
+    
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member not found"
+        )
+    
+    return member
+
+
+@router.patch("/{member_id}", response_model=MemberResponse)
+def update_member(
+    member_id: int,
+    member_update: MemberUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update a member's information."""
+    member = db.query(Member).filter(
+        Member.id == member_id,
+        Member.user_id == current_user.id
+    ).first()
+    
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member not found"
+        )
+    
+    if member_update.name is not None:
+        member.name = member_update.name
+    if member_update.relation is not None:
+        member.relation = member_update.relation
+    if member_update.dietary_restrictions is not None:
+        member.dietary_restrictions = member_update.dietary_restrictions
+    
+    db.commit()
+    db.refresh(member)
+    
+    return member
+
+
+@router.delete("/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_member(
+    member_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a member."""
+    member = db.query(Member).filter(
+        Member.id == member_id,
+        Member.user_id == current_user.id
+    ).first()
+    
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member not found"
+        )
+    
+    db.delete(member)
+    db.commit()
+    
+    return None
+
+==================================================
+FILE: ./routes/users.py
+==================================================
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from database import get_db
+from models.user import User
+from schemas.user import UserCreate, UserResponse, UserLogin, TokenResponse
+from utils.auth import create_access_token, get_current_user  
+
+router = APIRouter()
+
+@router.post("/", response_model=UserResponse)
+def create_user(user_in: UserCreate, db: Session = Depends(get_db)):
+    # Avoid duplicates
+    existing_user = db.query(User).filter(User.email == user_in.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User already exists with this email"
+        )
+    
+    # Create the user object
+    new_user = User(
+        email=user_in.email,
+        name=user_in.name
+    )
+    new_user.set_password(user_in.password)
+    
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+@router.post("/login", response_model=TokenResponse)
+def login(credentials: UserLogin, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == credentials.email).first()
+    
+    if not user or not user.check_password(credentials.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
+    
+    access_token = create_access_token(
+        user_id=user.id,
+        is_admin=user.is_admin
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": user
+    }
+
+@router.get("/me", response_model=UserResponse)
+def get_current_user_info(current_user: User = Depends(get_current_user)):
+    return current_user
+
+==================================================
+FILE: ./routes/dining_rooms.py
+==================================================
+
+# routes/dining_rooms.py
+"""
+Dining Room routes - read-only for users
+"""
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from database import get_db
+from models.dining_room import DiningRoom
+from schemas.dining_room import DiningRoomResponse  # ← Import from schemas
+
+router = APIRouter()
+
+
+@router.get("/", response_model=list[DiningRoomResponse])
+def get_dining_rooms(db: Session = Depends(get_db)):
+    """
+    Get all dining rooms.
+    Public endpoint - no authentication required.
+    """
+    rooms = db.query(DiningRoom).all()
+    return rooms
+
+
+
+
+==================================================
+FILE: ./routes/__init__.py
+==================================================
+
+
+
+==================================================
+FILE: ./routes/rules.py
+==================================================
+
+# routes/rules.py
+"""
+Rule routes - fee templates (admin creates, users view)
+"""
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from database import get_db
+from models.rule import Rule
+from schemas.rule import RuleCreate, RuleUpdate, RuleResponse
+
+router = APIRouter()
+
+
+@router.get("/", response_model=list[RuleResponse])
+def get_rules(db: Session = Depends(get_db)):
+    """
+    Get all fee rules.
+    Public endpoint - users need to see what fees might apply.
+    """
+   
+    rules = db.query(Rule).filter(Rule.enabled == 1).all()
+    return rules
+
+
+@router.get("/{rule_id}", response_model=RuleResponse)
+def get_rule(rule_id: int, db: Session = Depends(get_db)):
+    """Get a specific rule by ID"""
+    rule = db.query(Rule).filter(Rule.id == rule_id).first()
+    
+    if not rule:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Rule not found"
+        )
+    
+    return rule
+
+
+# Admin endpoints would go here (create, update, delete rules)
+# For now, rules are created via seed script
+
+==================================================
+FILE: ./routes/reservation_attendees.py
+==================================================
+
+# routes/reservation_attendees.py
+"""
+Reservation Attendee routes - managing who's coming to reservations
+"""
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from database import get_db
+from models.user import User
+from models.reservation import Reservation
+from models.member import Member
+from models.reservation_attendee import ReservationAttendee
+from schemas.reservation_attendee import AttendeeCreate, AttendeeResponse
+from utils.auth import get_current_user
+from routes.reservations import apply_automatic_fees
+
+router = APIRouter()
+
+
+@router.post("/{reservation_id}/attendees", response_model=AttendeeResponse, status_code=status.HTTP_201_CREATED)
+def add_attendee(
+    reservation_id: int,
+    attendee_in: AttendeeCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Add an attendee to a reservation.
+    User can only add attendees to their own reservations.
+    """
+    # Verify reservation exists and belongs to user
+    reservation = db.query(Reservation).filter(
+        Reservation.id == reservation_id,
+        Reservation.created_by_id == current_user.id
+    ).first()
+    
+    if not reservation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reservation not found"
+        )
+    
+    # Validate input - must provide either member_id OR name
+    if not attendee_in.member_id and not attendee_in.name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Must provide either member_id or name"
+        )
+    
+    # Case 1: Adding a registered member
+    if attendee_in.member_id:
+        # Verify member exists and belongs to user
+        member = db.query(Member).filter(
+            Member.id == attendee_in.member_id,
+            Member.user_id == current_user.id
+        ).first()
+        
+        if not member:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Member not found"
+            )
+        
+        # Check if already added
+        existing = db.query(ReservationAttendee).filter(
+            ReservationAttendee.reservation_id == reservation_id,
+            ReservationAttendee.member_id == attendee_in.member_id
+        ).first()
+        
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"{member.name} is already added to this reservation"
+            )
+        
+        # Create attendee from member
+        new_attendee = ReservationAttendee(
+            reservation_id=reservation_id,
+            member_id=member.id,
+            name=member.name,
+            attendee_type="member",
+            dietary_restrictions=member.dietary_restrictions
+        )
+    
+    # Case 2: Adding a one-time guest
+    else:
+        new_attendee = ReservationAttendee(
+            reservation_id=reservation_id,
+            member_id=None,
+            name=attendee_in.name,
+            attendee_type="guest",
+            dietary_restrictions=attendee_in.dietary_restrictions
+        )
+    
+    db.add(new_attendee)
+    db.commit()
+    db.refresh(new_attendee)
+    
+    # TRIGGER FEE RECALCULATION
+    apply_automatic_fees(db, reservation)
+    
+    return new_attendee
+
+
+@router.get("/{reservation_id}/attendees", response_model=list[AttendeeResponse])
+def get_attendees(
+    reservation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all attendees for a reservation.
+    User can only view attendees for their own reservations.
+    """
+    # Verify reservation belongs to user
+    reservation = db.query(Reservation).filter(
+        Reservation.id == reservation_id,
+        Reservation.created_by_id == current_user.id
+    ).first()
+    
+    if not reservation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reservation not found"
+        )
+    
+    attendees = db.query(ReservationAttendee).filter(
+        ReservationAttendee.reservation_id == reservation_id
+    ).all()
+    
+    return attendees
+
+
+@router.delete("/{reservation_id}/attendees/{attendee_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_attendee(
+    reservation_id: int,
+    attendee_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Remove an attendee from a reservation.
+    User can only remove attendees from their own reservations.
+    """
+    # Verify reservation belongs to user
+    reservation = db.query(Reservation).filter(
+        Reservation.id == reservation_id,
+        Reservation.created_by_id == current_user.id
+    ).first()
+    
+    if not reservation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reservation not found"
+        )
+    
+    # Find and delete attendee
+    attendee = db.query(ReservationAttendee).filter(
+        ReservationAttendee.id == attendee_id,
+        ReservationAttendee.reservation_id == reservation_id
+    ).first()
+    
+    if not attendee:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attendee not found"
+        )
+    
+    db.delete(attendee)
+    db.commit()
+    
+    # TRIGGER FEE RECALCULATION
+    apply_automatic_fees(db, reservation)
+    
+    return None
+
+==================================================
+FILE: ./routes/time_slots.py
+==================================================
+
+# routes/time_slots.py
+"""
+Time Slot routes - read-only for users
+"""
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from database import get_db
+from models.time_slot import TimeSlot
+from schemas.time_slot import TimeSlotResponse
+
+router = APIRouter()
+
+
+@router.get("/", response_model=list[TimeSlotResponse])
+def get_time_slots(db: Session = Depends(get_db)):
+    """
+    Get all time slots.
+    Public endpoint - no authentication required.
+    """
+    slots = db.query(TimeSlot).all()
+    return slots
+
+==================================================
+FILE: ./routes/reservations.py
+==================================================
+
+# routes/reservations.py
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from database import get_db
+from models.user import User
+from models.reservation import Reservation
+from models.dining_room import DiningRoom
+from models.member import Member
+from models.reservation_attendee import ReservationAttendee
+from models.rule import Rule
+from models.fee import Fee
+from schemas.reservation import (
+    ReservationCreate,
+    ReservationUpdate,
+    ReservationResponse,
+    ReservationDetailResponse
+)
+from utils.auth import get_current_user
+
+router = APIRouter()
+
+@router.post("/", response_model=ReservationResponse, status_code=status.HTTP_201_CREATED)
+def create_reservation(
+    reservation_in: ReservationCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    dining_room = db.query(DiningRoom).filter(DiningRoom.id == reservation_in.dining_room_id).first()
+    if not dining_room:
+        raise HTTPException(status_code=404, detail="Dining room not found")
+    
+    existing = db.query(Reservation).filter(
+        Reservation.dining_room_id == reservation_in.dining_room_id,
+        Reservation.date == reservation_in.date,
+        Reservation.status == "confirmed"
+    ).all()
+    
+    for res in existing:
+        if not (reservation_in.end_time <= res.start_time or reservation_in.start_time >= res.end_time):
+            raise HTTPException(status_code=409, detail="This time slot overlaps with an existing booking")
+
+    new_res = Reservation(
+        created_by_id=current_user.id,
+        dining_room_id=reservation_in.dining_room_id,
+        date=reservation_in.date,
+        meal_type=reservation_in.meal_type,
+        start_time=reservation_in.start_time,
+        end_time=reservation_in.end_time,
+        notes=reservation_in.notes,
+        status="confirmed"
+    )
+    db.add(new_res)
+    db.commit()
+    db.refresh(new_res)
+
+    creator_member = db.query(Member).filter(Member.user_id == current_user.id).first()
+    if creator_member:
+        attendee = ReservationAttendee(
+            reservation_id=new_res.id,
+            member_id=creator_member.id,
+            name=creator_member.name,
+            attendee_type="member",
+            dietary_restrictions=creator_member.dietary_restrictions
+        )
+        db.add(attendee)
+        db.commit()
+        db.refresh(new_res)
+
+    apply_automatic_fees(db, new_res)
+
+    return {
+        "id": new_res.id,
+        "created_by_id": new_res.created_by_id,
+        "dining_room_id": new_res.dining_room_id,
+        "date": new_res.date,
+        "meal_type": new_res.meal_type,
+        "start_time": new_res.start_time,
+        "end_time": new_res.end_time,
+        "notes": new_res.notes,
+        "status": new_res.status,
+        "created_at": new_res.created_at,
+        "attendee_count": len(new_res.attendees)
+    }
+
+@router.get("/", response_model=list[ReservationResponse])
+def get_my_reservations(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    reservations = db.query(Reservation).filter(
+        Reservation.created_by_id == current_user.id
+    ).order_by(Reservation.date.desc()).all()
+    
+    result = []
+    for res in reservations:
+        result.append({
+            "id": res.id,
+            "created_by_id": res.created_by_id,
+            "dining_room_id": res.dining_room_id,
+            "date": res.date,
+            "meal_type": res.meal_type,
+            "start_time": res.start_time,
+            "end_time": res.end_time,
+            "notes": res.notes,
+            "status": res.status,
+            "created_at": res.created_at,
+            "attendee_count": len(res.attendees)
+        })
+    
+    return result
+
+@router.get("/{reservation_id}", response_model=ReservationDetailResponse)
+def get_reservation(reservation_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    res = db.query(Reservation).filter(Reservation.id == reservation_id, Reservation.created_by_id == current_user.id).first()
+    if not res:
+        raise HTTPException(status_code=404, detail="Reservation not found")
+    
+    return {
+        "id": res.id,
+        "created_by_id": res.created_by_id,
+        "dining_room_id": res.dining_room_id,
+        "date": res.date,
+        "meal_type": res.meal_type,
+        "start_time": res.start_time,
+        "end_time": res.end_time,
+        "notes": res.notes,
+        "status": res.status,
+        "created_at": res.created_at,
+        "dining_room": {"id": res.dining_room.id, "name": res.dining_room.name, "capacity": res.dining_room.capacity}
+    }
+
+@router.patch("/{reservation_id}", response_model=ReservationResponse)
+def update_reservation(reservation_id: int, update: ReservationUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    res = db.query(Reservation).filter(Reservation.id == reservation_id, Reservation.created_by_id == current_user.id).first()
+    if not res:
+        raise HTTPException(status_code=404, detail="Not found")
+    
+    for key, value in update.model_dump(exclude_unset=True).items():
+        setattr(res, key, value)
+    
+    db.commit()
+    db.refresh(res)
+    
+    apply_automatic_fees(db, res)
+    
+    return {
+        "id": res.id,
+        "created_by_id": res.created_by_id,
+        "dining_room_id": res.dining_room_id,
+        "date": res.date,
+        "meal_type": res.meal_type,
+        "start_time": res.start_time,
+        "end_time": res.end_time,
+        "notes": res.notes,
+        "status": res.status,
+        "created_at": res.created_at,
+        "attendee_count": len(res.attendees)
+    }
+
+@router.delete("/{reservation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_reservation(reservation_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    res = db.query(Reservation).filter(Reservation.id == reservation_id, Reservation.created_by_id == current_user.id).first()
+    if not res:
+        raise HTTPException(status_code=404, detail="Not found")
+    db.delete(res)
+    db.commit()
+    return None
+
+def apply_automatic_fees(db: Session, reservation: Reservation):
+    attendees = db.query(ReservationAttendee).filter_by(
+        reservation_id=reservation.id
+    ).all()
+    
+    total_count = len(attendees)
+    member_attendees = [a for a in attendees if a.member_id is not None]
+    guest_count = len([a for a in attendees if a.member_id is None])
+    
+    # 1. PEAK HOURS
+    peak_rule = db.query(Rule).filter_by(code="peak_hours", enabled=1).first()
+    if peak_rule and reservation.date.weekday() in [4, 5, 6]:
+        existing = db.query(Fee).filter_by(
+            reservation_id=reservation.id,
+            rule_id=peak_rule.id
+        ).first()
+        
+        if not existing:
+            db.add(Fee(
+                reservation_id=reservation.id,
+                rule_id=peak_rule.id,
+                calculated_amount=peak_rule.base_amount,
+                paid=0
+            ))
+    else:
+        if peak_rule:
+            existing = db.query(Fee).filter_by(
+                reservation_id=reservation.id,
+                rule_id=peak_rule.id
+            ).first()
+            if existing:
+                db.delete(existing)
+    
+    # 2. EXCESS MEMBER GUESTS
+    excess_guest_rule = db.query(Rule).filter_by(
+        code="excess_member_guests", 
+        enabled=1
+    ).first()
+    
+    if excess_guest_rule:
+        total_allowed_guests = 0
+        for attendee in member_attendees:
+            member = db.query(Member).filter_by(id=attendee.member_id).first()
+            if member:
+                total_allowed_guests += member.guest_allowance
+        
+        excess_guests = max(0, guest_count - total_allowed_guests)
+        
+        existing_fee = db.query(Fee).filter_by(
+            reservation_id=reservation.id,
+            rule_id=excess_guest_rule.id
+        ).first()
+        
+        if excess_guests > 0:
+            if existing_fee:
+                existing_fee.quantity = excess_guests
+                existing_fee.calculated_amount = excess_guests * excess_guest_rule.base_amount
+            else:
+                db.add(Fee(
+                    reservation_id=reservation.id,
+                    rule_id=excess_guest_rule.id,
+                    quantity=excess_guests,
+                    calculated_amount=excess_guests * excess_guest_rule.base_amount,
+                    paid=0
+                ))
+        else:
+            if existing_fee:
+                db.delete(existing_fee)
+    
+    # 3. EXCESS OCCUPANCY
+    occupancy_rule = db.query(Rule).filter_by(
+        code="excess_occupancy",
+        enabled=1
+    ).first()
+    
+    if occupancy_rule:
+        excess_occupancy = max(0, total_count - (occupancy_rule.threshold or 0))
+        
+        existing_fee = db.query(Fee).filter_by(
+            reservation_id=reservation.id,
+            rule_id=occupancy_rule.id
+        ).first()
+        
+        if excess_occupancy > 0:
+            if existing_fee:
+                existing_fee.quantity = excess_occupancy
+                existing_fee.calculated_amount = excess_occupancy * occupancy_rule.base_amount
+            else:
+                db.add(Fee(
+                    reservation_id=reservation.id,
+                    rule_id=occupancy_rule.id,
+                    quantity=excess_occupancy,
+                    calculated_amount=excess_occupancy * occupancy_rule.base_amount,
+                    paid=0
+                ))
+        else:
+            if existing_fee:
+                db.delete(existing_fee)
+    
+    db.commit()
