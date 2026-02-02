@@ -25,10 +25,17 @@ def create_reservation(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    dining_room = db.query(DiningRoom).filter(DiningRoom.id == reservation_in.dining_room_id).first()
+    # 1. LOCKING: Select the dining room using with_for_update()
+    # This locks this specific dining room row until the transaction commits/rollbacks.
+    # No other request can modify reservations for this room while this is running.
+    dining_room = db.query(DiningRoom).filter(
+        DiningRoom.id == reservation_in.dining_room_id
+    ).with_for_update().first()
+
     if not dining_room:
         raise HTTPException(status_code=404, detail="Dining room not found")
     
+    # 2. CHECK AVAILABILITY (Now safe from race conditions)
     existing = db.query(Reservation).filter(
         Reservation.dining_room_id == reservation_in.dining_room_id,
         Reservation.date == reservation_in.date,
@@ -36,9 +43,11 @@ def create_reservation(
     ).all()
     
     for res in existing:
+        # Check for time overlap
         if not (reservation_in.end_time <= res.start_time or reservation_in.start_time >= res.end_time):
             raise HTTPException(status_code=409, detail="This time slot overlaps with an existing booking")
 
+    # 3. CREATE RESERVATION
     new_res = Reservation(
         created_by_id=current_user.id,
         dining_room_id=reservation_in.dining_room_id,
@@ -50,9 +59,10 @@ def create_reservation(
         status="confirmed"
     )
     db.add(new_res)
-    db.commit()
+    db.commit() # This commit releases the lock on DiningRoom
     db.refresh(new_res)
 
+    # 4. ADD CREATOR AS ATTENDEE (Optional, separate transaction usually okay here)
     creator_member = db.query(Member).filter(Member.user_id == current_user.id).first()
     if creator_member:
         attendee = ReservationAttendee(
