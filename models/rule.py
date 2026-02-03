@@ -24,7 +24,7 @@ class Rule(Base):
     threshold: Mapped[int | None] = mapped_column(Integer, nullable=True)  # e.g., "applies when party > 6"
     
     # Status
-    enabled: Mapped[bool] = mapped_column(Integer, default=True, nullable=False)  # SQLite uses Integer for Boolean
+    enabled: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     
     def __repr__(self) -> str:
         return f"<Rule(id={self.id}, code={self.code}, name={self.name})>"
