@@ -1,6 +1,7 @@
 # routes/users.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+
 from database import get_db
 from models.user import User
 from schemas.user import UserCreate, UserResponse, UserLogin, TokenResponse
@@ -17,7 +18,7 @@ def create_user(user_in: UserCreate, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User already exists"
+            detail="User already exists",
         )
 
     new_user = User(email=user_in.email, name=user_in.name)
@@ -30,6 +31,7 @@ def create_user(user_in: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
+@router.post("/login/", response_model=TokenResponse)
 def login(credentials: UserLogin, db: Session = Depends(get_db)):
     """Authenticate user and return JWT token"""
     user = db.query(User).filter(User.email == credentials.email).first()
@@ -37,18 +39,18 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     access_token = create_access_token(
         user_id=user.id,
-        is_admin=user.is_admin
+        is_admin=user.is_admin,
     )
 
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "user": user
+        "user": user,
     }
 
 

@@ -30,12 +30,10 @@ except ImportError as e:
     print(f"❌ FATAL: Could not import routes - {e}")
     raise
 
-# --- ENVIRONMENT VALIDATION ---
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("🚀 STERLING CATERING API - STARTUP CHECK")
-print("="*60)
+print("=" * 60)
 
-# Check critical environment variables
 DATABASE_URL = os.getenv("DATABASE_URL")
 SECRET_KEY = os.getenv("SECRET_KEY")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
@@ -51,151 +49,169 @@ else:
 
 print(f"✅ DATABASE_URL configured: {DATABASE_URL[:30]}...")
 print(f"✅ ENVIRONMENT: {ENVIRONMENT}")
-print("="*60 + "\n")
+print("=" * 60 + "\n")
 
-# --- STARTUP/SHUTDOWN LIFECYCLE ---
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    print(f"🚀 Starting Sterling Catering API v1.0.0")
+    print("🚀 Starting Sterling Catering API v1.0.0")
     print(f"📍 Environment: {ENVIRONMENT}")
-    
+
     try:
         Base.metadata.create_all(bind=engine)
-        print(f"✅ Database tables verified")
+        print("✅ Database tables verified")
     except Exception as e:
         print(f"❌ Database error: {e}")
         raise
-    
+
     yield
-    
-    # Shutdown
     print("👋 Shutting down Sterling Catering API")
 
-# --- FASTAPI APP INITIALIZATION ---
+
 app = FastAPI(
     title="Sterling Catering API",
     description="Premium catering booking system with dynamic fee management",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
-# --- MIDDLEWARE CONFIGURATION ---
-# Trust Proxy Headers (Required for HTTPS on Railway/Netlify)
+# Trust Proxy Headers (Required for HTTPS on Railway)
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
-# Dynamic CORS Origins based on environment
-def get_cors_origins():
-    if ENVIRONMENT == "production":
-        return ["https://sterling-client-demo.netlify.app"]
-    else:
-        return [
-            "http://localhost:5173",
-            "http://localhost:5174",
-            "http://localhost:8080",
-            "http://localhost:8081",
-        ]
+
+def parse_env_origins() -> list[str]:
+    """
+    Optional: set CORS_ORIGINS in Railway like:
+    CORS_ORIGINS=http://localhost:8081,https://your-frontend.vercel.app
+    """
+    raw = os.getenv("CORS_ORIGINS", "").strip()
+    if not raw:
+        return []
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
+
+def get_cors_origins() -> list[str]:
+    # Always allow local dev (so you can hit prod backend from localhost)
+    local = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://localhost:8081",
+        "http://127.0.0.1:8081",
+    ]
+
+    # Your deployed frontend(s)
+    deployed = [
+        "https://sterling-client-demo.netlify.app",
+        # add more here if needed
+    ]
+
+    # Optional overrides via env
+    extra = parse_env_origins()
+
+    # In production you still keep localhost allowed (for your dev testing)
+    # If you want to lock this down later, remove local from production.
+    return sorted(set(local + deployed + extra))
+
 
 origins = get_cors_origins()
-
 print(f"🌐 CORS configured for: {origins}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*--sterling-client-demo\.netlify\.app",
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],   # includes OPTIONS preflight
+    allow_headers=["*"],   # includes Authorization, Content-Type
     expose_headers=["*"],
 )
 
 # --- EXCEPTION HANDLERS (ENSURES CORS ON ERRORS) ---
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    """Handle HTTP exceptions with proper CORS headers"""
-    origin = request.headers.get("origin", "*")
-    
+    origin = request.headers.get("origin")
     print(f"⚠️  HTTP {exc.status_code}: {exc.detail}")
-    
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": exc.detail},
-        headers={
+
+    headers = {}
+    if origin in origins:
+        headers = {
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Credentials": "true",
             "Access-Control-Allow-Methods": "*",
             "Access-Control-Allow-Headers": "*",
         }
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=headers,
     )
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Catch-all exception handler with CORS headers and detailed logging"""
     import traceback
-    
-    # Log full error details
+
     error_id = datetime.utcnow().isoformat()
     print(f"❌ [{error_id}] UNHANDLED EXCEPTION:")
     print(f"   Path: {request.method} {request.url.path}")
     print(f"   Error: {exc}")
     print(traceback.format_exc())
-    
-    origin = request.headers.get("origin", "*")
-    
-    # Return sanitized error to client
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": "Internal server error",
-            "error_id": error_id,
-            "message": str(exc) if ENVIRONMENT != "production" else "An error occurred"
-        },
-        headers={
+
+    origin = request.headers.get("origin")
+
+    headers = {}
+    if origin in origins:
+        headers = {
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Credentials": "true",
             "Access-Control-Allow-Methods": "*",
             "Access-Control-Allow-Headers": "*",
         }
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error",
+            "error_id": error_id,
+            "message": str(exc) if ENVIRONMENT != "production" else "An error occurred",
+        },
+        headers=headers,
     )
 
 # --- REGISTER ROUTES ---
-try:
-    app.include_router(user_router, prefix="/users", tags=["Users"])
-    app.include_router(members_router, prefix="/members", tags=["Members"])
-    app.include_router(dining_rooms_router, prefix="/dining-rooms", tags=["Dining Rooms"])
-    app.include_router(time_slots_router, prefix="/time-slots", tags=["Time Slots"])
-    app.include_router(reservations_router, prefix="/reservations", tags=["Reservations"])
-    app.include_router(reservation_attendees_router, prefix="/reservations", tags=["Reservation Attendees"])
-    app.include_router(rules_router, prefix="/rules", tags=["Rules"])
-    app.include_router(fees_router, prefix="/reservations", tags=["Fees"])
-    app.include_router(admin_router, prefix="/admin", tags=["Admin"])
-    app.include_router(reports_router, prefix="/admin/reports", tags=["Reports"])
-    print("✅ All routes registered successfully")
-except Exception as e:
-    print(f"❌ Route registration error: {e}")
-    raise
+app.include_router(user_router, prefix="/users", tags=["Users"])
+app.include_router(members_router, prefix="/members", tags=["Members"])
+app.include_router(dining_rooms_router, prefix="/dining-rooms", tags=["Dining Rooms"])
+app.include_router(time_slots_router, prefix="/time-slots", tags=["Time Slots"])
+app.include_router(reservations_router, prefix="/reservations", tags=["Reservations"])
+app.include_router(reservation_attendees_router, prefix="/reservations", tags=["Reservation Attendees"])
+app.include_router(rules_router, prefix="/rules", tags=["Rules"])
+app.include_router(fees_router, prefix="/reservations", tags=["Fees"])
+app.include_router(admin_router, prefix="/admin", tags=["Admin"])
+app.include_router(reports_router, prefix="/admin/reports", tags=["Reports"])
 
-# --- HEALTH CHECK ---
+print("✅ All routes registered successfully")
+
+
 @app.get("/", tags=["Health Check"])
 def home():
-    """API health check with diagnostic info"""
     return {
         "message": "Sterling Catering API",
         "version": "1.0.0",
         "status": "operational",
         "environment": ENVIRONMENT,
         "timestamp": datetime.utcnow().isoformat(),
-        "cors_origins": origins
+        "cors_origins": origins,
     }
+
 
 @app.get("/health", tags=["Health Check"])
 def health_check():
-    """Detailed health check for monitoring"""
     from database import SessionLocal
     from sqlalchemy import text
-    
-    # Test database connection
+
     try:
         db = SessionLocal()
         db.execute(text("SELECT 1"))
@@ -203,28 +219,19 @@ def health_check():
         db_status = "connected"
     except Exception as e:
         db_status = f"error: {str(e)}"
-    
+
     return {
         "status": "healthy" if db_status == "connected" else "degraded",
         "database": db_status,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
     }
 
-# --- LOCAL DEVELOPMENT SERVER ---
+
 if __name__ == "__main__":
     import uvicorn
-    
-    # Railway uses PORT env var, fallback to 8080 for local dev
+
     port = int(os.getenv("PORT", 8080))
-    
-    # Disable reload in production for stability
     reload = ENVIRONMENT != "production"
-    
+
     print(f"\n🚀 Starting server on port {port} (reload={reload})")
-    
-    uvicorn.run(
-        "app:app",
-        host="0.0.0.0",
-        port=port,
-        reload=reload
-    )
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=reload)
