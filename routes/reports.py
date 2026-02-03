@@ -1,8 +1,6 @@
+# FORCE UPDATE: 2026-02-03 REPORT FIX
 # routes/reports.py
-"""
-Restaurant daily operations report generator
-Creates PDF with timeline schedule of all reservations
-"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -157,9 +155,7 @@ def create_daily_report_pdf(target_date: date, db: Session) -> BytesIO:
     for hour, time_str in time_slots:
         row = [time_str]
         
-        # -----------------------------------------------------------
-        # INDENTATION FIX: This loop is now INSIDE the time loop
-        # -----------------------------------------------------------
+        # --- FIXED LOGIC ---
         for room in rooms:
             cell_content = ""
             
@@ -199,7 +195,7 @@ def create_daily_report_pdf(target_date: date, db: Session) -> BytesIO:
                     cell_content = "\n".join(found_reservations)
             
             row.append(cell_content)
-        # -----------------------------------------------------------
+        # -------------------
         
         schedule_data.append(row)
     
@@ -253,7 +249,6 @@ def create_daily_report_pdf(target_date: date, db: Session) -> BytesIO:
     doc.build(elements)
     buffer.seek(0)
     return buffer
-
 
 @router.get("/daily-pdf")
 @router.get("/daily-pdf/")
