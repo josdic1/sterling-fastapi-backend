@@ -69,22 +69,6 @@ def create_reservation(
         )
     # ---------------------------------------------------------
 
-    # Check for overlapping confirmed reservations
-    # existing = db.query(Reservation).filter(
-    #     Reservation.dining_room_id == reservation_in.dining_room_id,
-    #     Reservation.date == reservation_in.date,
-    #     Reservation.status == "confirmed"
-    # ).all()
-
-    # for res in existing:
-    #     if not (
-    #         reservation_in.end_time <= res.start_time
-    #         or reservation_in.start_time >= res.end_time
-    #     ):
-    #         raise HTTPException(
-    #             status_code=409,
-    #             detail="This time slot overlaps with an existing booking"
-    #         )
 
     # Create reservation
     new_res = Reservation(
