@@ -1,8 +1,5 @@
 # routes/reports.py
-"""
-Restaurant daily operations report generator
-Creates PDF with timeline schedule of all reservations
-"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -89,7 +86,8 @@ def create_daily_report_pdf(target_date: date, db: Session) -> BytesIO:
     
     # Get all reservations for the day
     reservations = db.query(Reservation).filter(
-        Reservation.date == target_date
+        Reservation.date == target_date,
+        Reservation.status == "confirmed" # Only show confirmed
     ).order_by(Reservation.start_time).all()
     
     # Get all rooms
@@ -165,11 +163,11 @@ def create_daily_report_pdf(target_date: date, db: Session) -> BytesIO:
             if not room.is_active:
                 cell_content = "CLOSED"
             else:
-                # Find reservations for this room at this time
+                # Find ALL reservations for this room at this time
+                found_reservations = []
                 for res in reservations:
                     if res.dining_room_id == room.id:
                         # Check if time slot falls within reservation window
-                        # Convert time object to string if needed
                         if isinstance(res.start_time, str):
                             start_hour = int(res.start_time.split(':')[0])
                         else:
@@ -185,8 +183,12 @@ def create_daily_report_pdf(target_date: date, db: Session) -> BytesIO:
                                 reservation_id=res.id
                             ).count()
                             
-                            cell_content = f"{user.name}\nParty: {attendee_count}\n{res.meal_type.upper()}"
-                            break
+                            # Add to list instead of overwriting
+                            found_reservations.append(f"• {user.name} ({attendee_count})")
+                
+                # Join all found reservations with newlines
+                if found_reservations:
+                    cell_content = "\n".join(found_reservations)
             
             row.append(cell_content)
         
@@ -195,7 +197,7 @@ def create_daily_report_pdf(target_date: date, db: Session) -> BytesIO:
     # Calculate column widths dynamically
     num_rooms = len(rooms)
     room_col_width = (9 * inch) / num_rooms
-    col_widths = [1.5*inch] + [room_col_width] * num_rooms  # Wider TIME column for AM/PM
+    col_widths = [1.5*inch] + [room_col_width] * num_rooms
     
     schedule_table = Table(schedule_data, colWidths=col_widths, repeatRows=1)
     
@@ -229,11 +231,12 @@ def create_daily_report_pdf(target_date: date, db: Session) -> BytesIO:
                     ('TEXTCOLOR', (col_idx, row_idx), (col_idx, row_idx), colors.HexColor('#757575'))
                 )
     
-    # Highlight reservation cells with accent color
+    # Highlight reservation cells
     for row_idx in range(1, len(schedule_data)):
         for col_idx in range(1, len(schedule_data[row_idx])):
             cell = schedule_data[row_idx][col_idx]
-            if cell and cell != "CLOSED" and "Party:" in cell:
+            # Check for the bullet point we added
+            if cell and cell != "CLOSED" and "•" in cell:
                 table_style.append(
                     ('BACKGROUND', (col_idx, row_idx), (col_idx, row_idx), colors.HexColor('#fff5f3'))
                 )
