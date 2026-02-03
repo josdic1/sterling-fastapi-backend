@@ -152,47 +152,56 @@ def create_daily_report_pdf(target_date: date, db: Session) -> BytesIO:
     header_row = ['TIME'] + [room.name for room in rooms]
     schedule_data = [header_row]
     
+    
     # For each time slot, find reservations
     for hour, time_str in time_slots:
         row = [time_str]
-        
-        for room in rooms:
-            cell_content = ""
-            
-            # Check if room is inactive
-            if not room.is_active:
-                cell_content = "CLOSED"
-            else:
-                # Find ALL reservations for this room at this time
-                found_reservations = []
-                for res in reservations:
-                    if res.dining_room_id == room.id:
-                        # Check if time slot falls within reservation window
-                        if isinstance(res.start_time, str):
-                            start_hour = int(res.start_time.split(':')[0])
-                        else:
-                            start_hour = res.start_time.hour
-                        
-                        if hour == start_hour:
-                            # Get user info
-                            user = db.query(User).filter_by(id=res.created_by_id).first()
-                            if not user:
-                                continue
-                            
-                            attendee_count = db.query(ReservationAttendee).filter_by(
-                                reservation_id=res.id
-                            ).count()
-                            
-                            # Add to list instead of overwriting
-                            found_reservations.append(f"• {user.name} ({attendee_count})")
-                
-                # Join all found reservations with newlines
-                if found_reservations:
-                    cell_content = "\n".join(found_reservations)
-            
-            row.append(cell_content)
-        
-        schedule_data.append(row)
+
+    for room in rooms:
+        cell_content = ""
+
+        if not room.is_active:
+            cell_content = "CLOSED"
+        else:
+            found_reservations = []
+
+            for res in reservations:
+                if res.dining_room_id != room.id:
+                    continue
+
+                # Normalize start hour
+                if isinstance(res.start_time, str):
+                    start_hour = int(res.start_time.split(":")[0])
+                else:
+                    start_hour = res.start_time.hour
+
+                # Normalize end hour
+                if isinstance(res.end_time, str):
+                    end_hour = int(res.end_time.split(":")[0])
+                else:
+                    end_hour = res.end_time.hour
+
+                # 🔥 Correct overlap logic
+                # Show reservation for EVERY hour it spans
+                if start_hour <= hour < end_hour:
+                    user = db.query(User).filter_by(id=res.created_by_id).first()
+                    if not user:
+                        continue
+
+                    attendee_count = db.query(ReservationAttendee).filter_by(
+                        reservation_id=res.id
+                    ).count()
+
+                    found_reservations.append(
+                        f"• {user.name} ({attendee_count})"
+                    )
+
+            if found_reservations:
+                cell_content = "\n".join(found_reservations)
+
+        row.append(cell_content)
+
+    schedule_data.append(row)
     
     # Calculate column widths dynamically
     num_rooms = len(rooms)
