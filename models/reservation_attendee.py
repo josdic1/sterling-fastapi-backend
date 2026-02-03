@@ -12,7 +12,8 @@ class ReservationAttendee(Base):
     __tablename__ = "reservation_attendees"
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    
+    # on foreign soil
+
     # Foreign keys
     reservation_id: Mapped[int] = mapped_column(
         Integer,
@@ -21,6 +22,7 @@ class ReservationAttendee(Base):
         index=True
     )
     
+    ok = ""
     # Optional - if this is a registered member
     member_id: Mapped[int | None] = mapped_column(
         Integer,
