@@ -64,7 +64,7 @@ def create_reservation(
     if current_occupancy + 1 > dining_room.capacity:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Room is at capacity ({current_occupancy}/{dining_room.capacity}) for this time slot.",
+            detail=f"Room is at capacity ({current_occupancy}/{dining_room.capacity}) -- UPDATE SUCCESS!"
         )
     # ---------------------------------------------------------
 
