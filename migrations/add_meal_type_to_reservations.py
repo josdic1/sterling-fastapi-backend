@@ -1,41 +1,90 @@
+# migrations/add_meal_type_to_reservations.py
+#!/usr/bin/env python3
+"""
+Migration: Add meal_type to reservations table (cross-db, idempotent)
+
+- Adds meal_type column if missing
+- Backfills existing reservations:
+    - lunch if start_time between 11:00 and 13:59
+    - otherwise dinner
+"""
+
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlalchemy import text
+from sqlalchemy import text, inspect
 from database import engine
 
+
+def _column_exists(table_name: str, column_name: str) -> bool:
+    insp = inspect(engine)
+    cols = [c["name"] for c in insp.get_columns(table_name)]
+    return column_name in cols
+
+
 def upgrade():
-    """Add meal_type column to reservations table"""
     with engine.connect() as conn:
-        # Check if column already exists
-        result = conn.execute(text("PRAGMA table_info(reservations)"))
-        columns = [row[1] for row in result]
-        
-        if 'meal_type' not in columns:
-            # Add column
+        dialect = conn.dialect.name
+
+        # Add column if missing
+        if dialect == "postgresql":
             conn.execute(text("""
-                ALTER TABLE reservations 
-                ADD COLUMN meal_type VARCHAR
+                ALTER TABLE reservations
+                ADD COLUMN IF NOT EXISTS meal_type VARCHAR
             """))
-            print("✅ Added meal_type column")
         else:
-            print("ℹ️  meal_type column already exists")
-        
-        # Set default values for existing records that don't have meal_type set
-        conn.execute(text("""
-            UPDATE reservations 
-            SET meal_type = CASE 
-                WHEN CAST(start_time AS TIME) >= '11:00:00' 
-                     AND CAST(start_time AS TIME) < '14:00:00' 
-                THEN 'lunch'
-                ELSE 'dinner'
-            END
-            WHERE meal_type IS NULL
-        """))
-        
+            if not _column_exists("reservations", "meal_type"):
+                conn.execute(text("""
+                    ALTER TABLE reservations
+                    ADD COLUMN meal_type VARCHAR
+                """))
+
+        # Backfill NULL meal_type
+        if dialect == "postgresql":
+            conn.execute(text("""
+                UPDATE reservations
+                SET meal_type = CASE
+                    WHEN start_time::time >= TIME '11:00:00'
+                     AND start_time::time <  TIME '14:00:00'
+                    THEN 'lunch'
+                    ELSE 'dinner'
+                END
+                WHERE meal_type IS NULL
+            """))
+        else:
+            # SQLite: start_time is typically stored as "HH:MM"
+            conn.execute(text("""
+                UPDATE reservations
+                SET meal_type = CASE
+                    WHEN substr(start_time, 1, 2) BETWEEN '11' AND '13'
+                    THEN 'lunch'
+                    ELSE 'dinner'
+                END
+                WHERE meal_type IS NULL
+            """))
+
         conn.commit()
-    print("✅ Migration complete")
+
+    print("✅ meal_type ensured and backfilled on reservations")
+
+
+def downgrade():
+    with engine.connect() as conn:
+        dialect = conn.dialect.name
+
+        if dialect == "postgresql":
+            conn.execute(text("""
+                ALTER TABLE reservations
+                DROP COLUMN IF EXISTS meal_type
+            """))
+            conn.commit()
+            print("✅ meal_type dropped (if it existed)")
+            return
+
+        print("⚠️  SQLite downgrade not performed (DROP COLUMN may not be supported).")
+        print("   If you really need it, recreate the table without meal_type.")
+
 
 if __name__ == "__main__":
     upgrade()

@@ -272,30 +272,65 @@ def apply_automatic_fees(db: Session, reservation: Reservation):
     ).all()
 
     total_count = len(attendees)
+
+    # Split attendees
     member_attendees = [a for a in attendees if a.member_id is not None]
     guest_count = len([a for a in attendees if a.member_id is None])
 
-    # PEAK HOURS
-    peak_rule = db.query(Rule).filter_by(code="peak_hours", enabled=1).first()
-    if peak_rule and reservation.date.weekday() in [4, 5, 6]:
+    # Helper: upsert fee as a single row per rule (idempotent)
+    def set_fee(rule: Rule, quantity: int | None, amount: float):
         existing = db.query(Fee).filter_by(
             reservation_id=reservation.id,
-            rule_id=peak_rule.id
+            rule_id=rule.id
         ).first()
-        if not existing:
-            db.add(Fee(
-                reservation_id=reservation.id,
-                rule_id=peak_rule.id,
-                calculated_amount=peak_rule.base_amount,
-                paid=0
-            ))
-    else:
-        if peak_rule:
-            existing = db.query(Fee).filter_by(
-                reservation_id=reservation.id,
-                rule_id=peak_rule.id
-            ).first()
+
+        if amount <= 0:
             if existing:
                 db.delete(existing)
+            return
+
+        if existing:
+            existing.quantity = quantity
+            existing.calculated_amount = amount
+            # keep paid as-is
+        else:
+            db.add(Fee(
+                reservation_id=reservation.id,
+                rule_id=rule.id,
+                quantity=quantity,
+                calculated_amount=amount,
+                paid=0
+            ))
+
+    # ---------------------------
+    # PEAK HOURS (Fri/Sat/Sun)
+    # ---------------------------
+    peak_rule = db.query(Rule).filter_by(code="peak_hours", enabled=1).first()
+    if peak_rule:
+        is_peak_day = reservation.date.weekday() in [4, 5, 6]  # Fri/Sat/Sun
+        set_fee(peak_rule, None, peak_rule.base_amount if is_peak_day else 0)
+
+    # ---------------------------
+    # EXCESS OCCUPANCY (> threshold)
+    # ---------------------------
+    occupancy_rule = db.query(Rule).filter_by(code="excess_occupancy", enabled=1).first()
+    if occupancy_rule and occupancy_rule.threshold:
+        excess = max(0, total_count - occupancy_rule.threshold)
+        set_fee(occupancy_rule, excess if excess > 0 else None, excess * occupancy_rule.base_amount)
+
+    # ---------------------------
+    # EXCESS MEMBER GUESTS (beyond allowance)
+    # ---------------------------
+    excess_guest_rule = db.query(Rule).filter_by(code="excess_member_guests", enabled=1).first()
+    if excess_guest_rule:
+        # Load member guest_allowance for each attending member
+        member_ids = [a.member_id for a in member_attendees if a.member_id is not None]
+        allowance = 0
+        if member_ids:
+            members = db.query(Member).filter(Member.id.in_(member_ids)).all()
+            allowance = sum((m.guest_allowance or 4) for m in members)  # fallback
+
+        excess_guests = max(0, guest_count - allowance)
+        set_fee(excess_guest_rule, excess_guests if excess_guests > 0 else None, excess_guests * excess_guest_rule.base_amount)
 
     db.commit()

@@ -1,52 +1,78 @@
+# migrations/add_is_active_to_dining_rooms.py
 #!/usr/bin/env python3
 """
-Migration: Add is_active field to dining_rooms table
-Allows admin to enable/disable rooms without deleting them
+Migration: Add is_active to dining_rooms table (cross-db, idempotent)
+
+- Postgres: uses ADD COLUMN IF NOT EXISTS
+- SQLite: checks schema via SQLAlchemy inspector before ALTER TABLE
 """
 
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlalchemy import text
+from sqlalchemy import text, inspect
 from database import engine
 
+
+def _column_exists(table_name: str, column_name: str) -> bool:
+    insp = inspect(engine)
+    cols = [c["name"] for c in insp.get_columns(table_name)]
+    return column_name in cols
+
+
 def upgrade():
-    """Add is_active column to dining_rooms"""
     with engine.connect() as conn:
-        # Check if column already exists
-        result = conn.execute(text("PRAGMA table_info(dining_rooms)"))
-        columns = [row[1] for row in result]
-        
-        if 'is_active' not in columns:
-            # Add column with default true
+        dialect = conn.dialect.name
+
+        if dialect == "postgresql":
             conn.execute(text("""
-                ALTER TABLE dining_rooms 
-                ADD COLUMN is_active BOOLEAN DEFAULT 1 NOT NULL
+                ALTER TABLE dining_rooms
+                ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
             """))
-            print("✅ Added is_active column to dining_rooms")
         else:
-            print("ℹ️  is_active column already exists")
-        
-        # Set all existing rooms to active
-        conn.execute(text("""
-            UPDATE dining_rooms 
-            SET is_active = 1 
-            WHERE is_active IS NULL
-        """))
-        
+            if not _column_exists("dining_rooms", "is_active"):
+                # SQLite stores booleans as ints usually
+                conn.execute(text("""
+                    ALTER TABLE dining_rooms
+                    ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1
+                """))
+
+        # Backfill anything that might be NULL
+        if dialect == "postgresql":
+            conn.execute(text("""
+                UPDATE dining_rooms
+                SET is_active = TRUE
+                WHERE is_active IS NULL
+            """))
+        else:
+            conn.execute(text("""
+                UPDATE dining_rooms
+                SET is_active = 1
+                WHERE is_active IS NULL
+            """))
+
         conn.commit()
-    
-    print("✅ Migration complete")
+
+    print("✅ is_active ensured on dining_rooms")
+
 
 def downgrade():
-    """Remove is_active column"""
     with engine.connect() as conn:
-        # SQLite doesn't support DROP COLUMN easily
-        # Would need to recreate table
-        print("⚠️  Downgrade not implemented for SQLite")
-        print("   For PostgreSQL, use: ALTER TABLE dining_rooms DROP COLUMN is_active")
+        dialect = conn.dialect.name
+
+        if dialect == "postgresql":
+            conn.execute(text("""
+                ALTER TABLE dining_rooms
+                DROP COLUMN IF EXISTS is_active
+            """))
+            conn.commit()
+            print("✅ is_active dropped (if it existed)")
+            return
+
+        print("⚠️  SQLite downgrade not performed (DROP COLUMN may not be supported).")
+        print("   If you really need it, recreate the table without is_active.")
+
 
 if __name__ == "__main__":
-    print("🔧 Adding is_active to dining rooms...")
     upgrade()
