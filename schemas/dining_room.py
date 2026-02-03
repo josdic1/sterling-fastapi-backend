@@ -1,14 +1,12 @@
 # schemas/dining_room.py
-"""
-Pydantic schemas for Dining Room
-"""
-from pydantic import BaseModel, ConfigDict
-
+from pydantic import BaseModel
 
 class DiningRoomResponse(BaseModel):
-    """What we send back to users"""
+    """Schema for dining room responses"""
     id: int
     name: str
     capacity: int
+    is_active: bool  # CRITICAL: Must include this field
     
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True

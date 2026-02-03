@@ -13,6 +13,8 @@ from routes.reservations import router as reservations_router
 from routes.reservation_attendees import router as reservation_attendees_router
 from routes.rules import router as rules_router
 from routes.fees import router as fees_router
+from routes.admin import router as admin_router  # NEW: Admin routes
+from routes.reports import router as reports_router  # NEW: Reports
 
 # Create Tables (if they don't exist)
 Base.metadata.create_all(bind=engine)
@@ -55,6 +57,8 @@ app.include_router(reservations_router, prefix="/reservations", tags=["Reservati
 app.include_router(reservation_attendees_router, prefix="/reservations", tags=["Reservation Attendees"])
 app.include_router(rules_router, prefix="/rules", tags=["Rules"])
 app.include_router(fees_router, prefix="/reservations", tags=["Fees"])
+app.include_router(admin_router, prefix="/admin", tags=["Admin"])  # NEW: Admin routes
+app.include_router(reports_router, prefix="/admin/reports", tags=["Reports"])  # NEW: Reports
 
 @app.get("/", tags=["Health Check"])
 def home():
