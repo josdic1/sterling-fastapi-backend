@@ -42,23 +42,49 @@ def create_reservation(
 
     if not dining_room:
         raise HTTPException(status_code=404, detail="Dining room not found")
+    # ---------------------------------------------------------
+    # NEW CAPACITY CHECK
+    # ---------------------------------------------------------
+    # 1. Count total people (attendees) already booked in overlapping slots
+    current_occupancy = (
+        db.query(ReservationAttendee)
+        .join(Reservation)
+        .filter(
+            Reservation.dining_room_id == reservation_in.dining_room_id,
+            Reservation.date == reservation_in.date,
+            Reservation.status == "confirmed",
+            # Overlap logic: (StartA < EndB) and (EndA > StartB)
+            Reservation.start_time < reservation_in.end_time,
+            Reservation.end_time > reservation_in.start_time
+        )
+        .count()
+    )
+
+    # 2. Check if adding this new reservation (assuming +1 for the creator initially) exceeds capacity
+    # Note: Guests are added *after* creation, so we assume a minimum footprint of 1 person now.
+    if current_occupancy + 1 > dining_room.capacity:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Room is at capacity ({current_occupancy}/{dining_room.capacity}) for this time slot."
+        )
+    # ---------------------------------------------------------
 
     # Check for overlapping confirmed reservations
-    existing = db.query(Reservation).filter(
-        Reservation.dining_room_id == reservation_in.dining_room_id,
-        Reservation.date == reservation_in.date,
-        Reservation.status == "confirmed"
-    ).all()
+    # existing = db.query(Reservation).filter(
+    #     Reservation.dining_room_id == reservation_in.dining_room_id,
+    #     Reservation.date == reservation_in.date,
+    #     Reservation.status == "confirmed"
+    # ).all()
 
-    for res in existing:
-        if not (
-            reservation_in.end_time <= res.start_time
-            or reservation_in.start_time >= res.end_time
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail="This time slot overlaps with an existing booking"
-            )
+    # for res in existing:
+    #     if not (
+    #         reservation_in.end_time <= res.start_time
+    #         or reservation_in.start_time >= res.end_time
+    #     ):
+    #         raise HTTPException(
+    #             status_code=409,
+    #             detail="This time slot overlaps with an existing booking"
+    #         )
 
     # Create reservation
     new_res = Reservation(
