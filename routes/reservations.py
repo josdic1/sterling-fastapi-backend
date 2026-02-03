@@ -14,7 +14,7 @@ from schemas.reservation import (
     ReservationCreate,
     ReservationUpdate,
     ReservationResponse,
-    ReservationDetailResponse
+    ReservationDetailResponse,
 )
 from utils.auth import get_current_user
 
@@ -30,7 +30,7 @@ router = APIRouter()
 def create_reservation(
     reservation_in: ReservationCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     # Lock dining room row to prevent race conditions
     dining_room = (
@@ -42,33 +42,31 @@ def create_reservation(
 
     if not dining_room:
         raise HTTPException(status_code=404, detail="Dining room not found")
+
     # ---------------------------------------------------------
-    # NEW CAPACITY CHECK
+    # CAPACITY CHECK (allows overlaps; blocks only when capacity exceeded)
     # ---------------------------------------------------------
-    # 1. Count total people (attendees) already booked in overlapping slots
     current_occupancy = (
         db.query(ReservationAttendee)
-        .join(Reservation)
+        .join(Reservation, ReservationAttendee.reservation_id == Reservation.id)
         .filter(
             Reservation.dining_room_id == reservation_in.dining_room_id,
             Reservation.date == reservation_in.date,
             Reservation.status == "confirmed",
             # Overlap logic: (StartA < EndB) and (EndA > StartB)
             Reservation.start_time < reservation_in.end_time,
-            Reservation.end_time > reservation_in.start_time
+            Reservation.end_time > reservation_in.start_time,
         )
         .count()
     )
 
-    # 2. Check if adding this new reservation (assuming +1 for the creator initially) exceeds capacity
-    # Note: Guests are added *after* creation, so we assume a minimum footprint of 1 person now.
+    # Reservation starts with a minimum footprint of 1 (creator)
     if current_occupancy + 1 > dining_room.capacity:
         raise HTTPException(
-            status_code=409,
-            detail=f"Room is at capacity ({current_occupancy}/{dining_room.capacity}) for this time slot."
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Room is at capacity ({current_occupancy}/{dining_room.capacity}) for this time slot.",
         )
     # ---------------------------------------------------------
-
 
     # Create reservation
     new_res = Reservation(
@@ -79,7 +77,7 @@ def create_reservation(
         start_time=reservation_in.start_time,
         end_time=reservation_in.end_time,
         notes=reservation_in.notes,
-        status="confirmed"
+        status="confirmed",
     )
 
     db.add(new_res)
@@ -87,9 +85,7 @@ def create_reservation(
     db.refresh(new_res)
 
     # Add creator as attendee if they have a member record
-    creator_member = db.query(Member).filter(
-        Member.user_id == current_user.id
-    ).first()
+    creator_member = db.query(Member).filter(Member.user_id == current_user.id).first()
 
     if creator_member:
         attendee = ReservationAttendee(
@@ -97,7 +93,7 @@ def create_reservation(
             member_id=creator_member.id,
             name=creator_member.name,
             attendee_type="member",
-            dietary_restrictions=creator_member.dietary_restrictions
+            dietary_restrictions=creator_member.dietary_restrictions,
         )
         db.add(attendee)
         db.commit()
@@ -105,9 +101,11 @@ def create_reservation(
     # Apply automatic fees
     apply_automatic_fees(db, new_res)
 
-    attendee_count = db.query(ReservationAttendee).filter_by(
-        reservation_id=new_res.id
-    ).count()
+    attendee_count = (
+        db.query(ReservationAttendee)
+        .filter_by(reservation_id=new_res.id)
+        .count()
+    )
 
     return ReservationResponse(
         id=new_res.id,
@@ -120,8 +118,9 @@ def create_reservation(
         notes=new_res.notes,
         status=new_res.status,
         created_at=new_res.created_at,
-        attendee_count=attendee_count
+        attendee_count=attendee_count,
     )
+
 
 # ===============================
 # LIST MY RESERVATIONS
@@ -131,7 +130,7 @@ def create_reservation(
 @router.get("/", response_model=list[ReservationResponse])
 def get_my_reservations(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     reservations = (
         db.query(Reservation)
@@ -140,11 +139,13 @@ def get_my_reservations(
         .all()
     )
 
-    result = []
+    result: list[ReservationResponse] = []
     for res in reservations:
-        attendee_count = db.query(ReservationAttendee).filter_by(
-            reservation_id=res.id
-        ).count()
+        attendee_count = (
+            db.query(ReservationAttendee)
+            .filter_by(reservation_id=res.id)
+            .count()
+        )
 
         result.append(
             ReservationResponse(
@@ -158,7 +159,7 @@ def get_my_reservations(
                 notes=res.notes,
                 status=res.status,
                 created_at=res.created_at,
-                attendee_count=attendee_count
+                attendee_count=attendee_count,
             )
         )
 
@@ -173,12 +174,16 @@ def get_my_reservations(
 def get_reservation(
     reservation_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    res = db.query(Reservation).filter(
-        Reservation.id == reservation_id,
-        Reservation.created_by_id == current_user.id
-    ).first()
+    res = (
+        db.query(Reservation)
+        .filter(
+            Reservation.id == reservation_id,
+            Reservation.created_by_id == current_user.id,
+        )
+        .first()
+    )
 
     if not res:
         raise HTTPException(status_code=404, detail="Reservation not found")
@@ -197,8 +202,8 @@ def get_reservation(
         dining_room={
             "id": res.dining_room.id,
             "name": res.dining_room.name,
-            "capacity": res.dining_room.capacity
-        }
+            "capacity": res.dining_room.capacity,
+        },
     )
 
 
@@ -211,12 +216,16 @@ def update_reservation(
     reservation_id: int,
     update: ReservationUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    res = db.query(Reservation).filter(
-        Reservation.id == reservation_id,
-        Reservation.created_by_id == current_user.id
-    ).first()
+    res = (
+        db.query(Reservation)
+        .filter(
+            Reservation.id == reservation_id,
+            Reservation.created_by_id == current_user.id,
+        )
+        .first()
+    )
 
     if not res:
         raise HTTPException(status_code=404, detail="Not found")
@@ -229,9 +238,11 @@ def update_reservation(
 
     apply_automatic_fees(db, res)
 
-    attendee_count = db.query(ReservationAttendee).filter_by(
-        reservation_id=res.id
-    ).count()
+    attendee_count = (
+        db.query(ReservationAttendee)
+        .filter_by(reservation_id=res.id)
+        .count()
+    )
 
     return ReservationResponse(
         id=res.id,
@@ -244,7 +255,7 @@ def update_reservation(
         notes=res.notes,
         status=res.status,
         created_at=res.created_at,
-        attendee_count=attendee_count
+        attendee_count=attendee_count,
     )
 
 
@@ -256,12 +267,16 @@ def update_reservation(
 def delete_reservation(
     reservation_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    res = db.query(Reservation).filter(
-        Reservation.id == reservation_id,
-        Reservation.created_by_id == current_user.id
-    ).first()
+    res = (
+        db.query(Reservation)
+        .filter(
+            Reservation.id == reservation_id,
+            Reservation.created_by_id == current_user.id,
+        )
+        .first()
+    )
 
     if not res:
         raise HTTPException(status_code=404, detail="Not found")
@@ -276,22 +291,23 @@ def delete_reservation(
 # ===============================
 
 def apply_automatic_fees(db: Session, reservation: Reservation):
-    attendees = db.query(ReservationAttendee).filter_by(
-        reservation_id=reservation.id
-    ).all()
+    attendees = (
+        db.query(ReservationAttendee)
+        .filter_by(reservation_id=reservation.id)
+        .all()
+    )
 
     total_count = len(attendees)
 
-    # Split attendees
     member_attendees = [a for a in attendees if a.member_id is not None]
     guest_count = len([a for a in attendees if a.member_id is None])
 
-    # Helper: upsert fee as a single row per rule (idempotent)
     def set_fee(rule: Rule, quantity: int | None, amount: float):
-        existing = db.query(Fee).filter_by(
-            reservation_id=reservation.id,
-            rule_id=rule.id
-        ).first()
+        existing = (
+            db.query(Fee)
+            .filter_by(reservation_id=reservation.id, rule_id=rule.id)
+            .first()
+        )
 
         if amount <= 0:
             if existing:
@@ -301,15 +317,16 @@ def apply_automatic_fees(db: Session, reservation: Reservation):
         if existing:
             existing.quantity = quantity
             existing.calculated_amount = amount
-            # keep paid as-is
         else:
-            db.add(Fee(
-                reservation_id=reservation.id,
-                rule_id=rule.id,
-                quantity=quantity,
-                calculated_amount=amount,
-                paid=0
-            ))
+            db.add(
+                Fee(
+                    reservation_id=reservation.id,
+                    rule_id=rule.id,
+                    quantity=quantity,
+                    calculated_amount=amount,
+                    paid=0,
+                )
+            )
 
     # ---------------------------
     # PEAK HOURS (Fri/Sat/Sun)
@@ -322,24 +339,35 @@ def apply_automatic_fees(db: Session, reservation: Reservation):
     # ---------------------------
     # EXCESS OCCUPANCY (> threshold)
     # ---------------------------
-    occupancy_rule = db.query(Rule).filter_by(code="excess_occupancy", enabled=1).first()
+    occupancy_rule = (
+        db.query(Rule).filter_by(code="excess_occupancy", enabled=1).first()
+    )
     if occupancy_rule and occupancy_rule.threshold:
         excess = max(0, total_count - occupancy_rule.threshold)
-        set_fee(occupancy_rule, excess if excess > 0 else None, excess * occupancy_rule.base_amount)
+        set_fee(
+            occupancy_rule,
+            excess if excess > 0 else None,
+            excess * occupancy_rule.base_amount,
+        )
 
     # ---------------------------
     # EXCESS MEMBER GUESTS (beyond allowance)
     # ---------------------------
-    excess_guest_rule = db.query(Rule).filter_by(code="excess_member_guests", enabled=1).first()
+    excess_guest_rule = (
+        db.query(Rule).filter_by(code="excess_member_guests", enabled=1).first()
+    )
     if excess_guest_rule:
-        # Load member guest_allowance for each attending member
         member_ids = [a.member_id for a in member_attendees if a.member_id is not None]
         allowance = 0
         if member_ids:
             members = db.query(Member).filter(Member.id.in_(member_ids)).all()
-            allowance = sum((m.guest_allowance or 4) for m in members)  # fallback
+            allowance = sum((m.guest_allowance or 4) for m in members)
 
         excess_guests = max(0, guest_count - allowance)
-        set_fee(excess_guest_rule, excess_guests if excess_guests > 0 else None, excess_guests * excess_guest_rule.base_amount)
+        set_fee(
+            excess_guest_rule,
+            excess_guests if excess_guests > 0 else None,
+            excess_guests * excess_guest_rule.base_amount,
+        )
 
     db.commit()

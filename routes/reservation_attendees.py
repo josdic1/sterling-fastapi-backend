@@ -1,4 +1,3 @@
-# routes/reservation_attendees.py
 """
 Reservation Attendee routes - managing who's coming to reservations
 """
@@ -8,12 +7,39 @@ from database import get_db
 from models.user import User
 from models.reservation import Reservation
 from models.member import Member
+from models.dining_room import DiningRoom  # <--- ADDED THIS IMPORT
 from models.reservation_attendee import ReservationAttendee
 from schemas.reservation_attendee import AttendeeCreate, AttendeeResponse
 from utils.auth import get_current_user
 from routes.reservations import apply_automatic_fees
 
 router = APIRouter()
+
+# Helper function to check capacity
+def assert_capacity_available(db: Session, reservation: Reservation, adding: int = 1):
+    room = db.query(DiningRoom).filter(DiningRoom.id == reservation.dining_room_id).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Dining room not found")
+
+    # Count total attendees currently occupying this room during this reservation's time window
+    occupancy = (
+        db.query(ReservationAttendee)
+        .join(Reservation, ReservationAttendee.reservation_id == Reservation.id)
+        .filter(
+            Reservation.dining_room_id == reservation.dining_room_id,
+            Reservation.date == reservation.date,
+            Reservation.status == "confirmed",
+            Reservation.start_time < reservation.end_time,
+            Reservation.end_time > reservation.start_time,
+        )
+        .count()
+    )
+
+    if occupancy + adding > room.capacity:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Room is at capacity ({occupancy}/{room.capacity}). Cannot add more guests."
+        )
 
 
 @router.post(
@@ -43,6 +69,12 @@ def add_attendee(
 
     if not reservation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reservation not found")
+
+    # ---------------------------------------------------------
+    # CALL THE CHECK HERE (This was missing)
+    # ---------------------------------------------------------
+    assert_capacity_available(db, reservation, adding=1)
+    # ---------------------------------------------------------
 
     # Validate input - must provide either member_id OR name
     if not attendee_in.member_id and not attendee_in.name:
