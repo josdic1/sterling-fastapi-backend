@@ -23,3 +23,10 @@ instance/
 .vscode/
 .idea/
 *.swp
+
+
+.env
+project_context.txt
+__pycache__/
+venv/
+*.log
