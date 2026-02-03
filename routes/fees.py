@@ -76,7 +76,7 @@ def calculate_fees(
                     reservation_id=reservation_id,
                     rule_id=rule.id,
                     calculated_amount=fee_amount,
-                    paid=False
+                    paid=0
                 )
                 db.add(fee)
                 fees.append(fee)
@@ -94,7 +94,7 @@ def calculate_fees(
                     reservation_id=reservation_id,
                     rule_id=rule.id,
                     calculated_amount=fee_amount,
-                    paid=False
+                    paid=0
                 )
                 db.add(fee)
                 fees.append(fee)
@@ -110,7 +110,7 @@ def calculate_fees(
                     reservation_id=reservation_id,
                     rule_id=rule.id,
                     calculated_amount=rule.base_amount,
-                    paid=False
+                    paid=0
                 )
                 db.add(fee)
                 fees.append(fee)

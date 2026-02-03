@@ -1,9 +1,11 @@
 # schemas/fee.py
 """
 Pydantic schemas for Fee
+Expose paid as a boolean, while DB stores paid as 0/1 integer.
 """
-from pydantic import BaseModel, ConfigDict
 from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class FeeCreate(BaseModel):
@@ -12,6 +14,7 @@ class FeeCreate(BaseModel):
     quantity: int | None = None
     calculated_amount: float
     override_amount: float | None = None
+    # NOTE: we do NOT accept "paid" here from users for fee creation
 
 
 class FeeUpdate(BaseModel):
@@ -28,10 +31,11 @@ class FeeResponse(BaseModel):
     quantity: int | None
     calculated_amount: float
     override_amount: float | None
-    paid: bool
+    # IMPORTANT: read from Fee.is_paid property, but output as "paid"
+    paid: bool = Field(validation_alias="is_paid")
     created_at: datetime
-    
-    model_config = ConfigDict(from_attributes=True)
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class FeeDetailResponse(BaseModel):
@@ -41,10 +45,10 @@ class FeeDetailResponse(BaseModel):
     quantity: int | None
     calculated_amount: float
     override_amount: float | None
-    paid: bool
+    paid: bool = Field(validation_alias="is_paid")
     created_at: datetime
-    
+
     # Nested rule info
-    rule: dict  # {"id": 1, "code": "no_call_no_show", "name": "No Call No Show Fee", "base_amount": 40.0}
-    
-    model_config = ConfigDict(from_attributes=True)
+    rule: dict  # {"id": 1, "code": "...", "name": "...", "base_amount": 40.0}
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
