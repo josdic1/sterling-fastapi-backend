@@ -66,7 +66,8 @@ def get_current_user(
         if user_id is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication credentials"
+                detail="Invalid authentication credentials",
+                headers={"WWW-Authenticate": "Bearer"}
             )
         
         user = db.query(User).filter(User.id == user_id).first()
@@ -74,7 +75,8 @@ def get_current_user(
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found"
+                detail="User not found",
+                headers={"WWW-Authenticate": "Bearer"}
             )
         
         return user
@@ -82,5 +84,6 @@ def get_current_user(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e)
+            detail=str(e),
+            headers={"WWW-Authenticate": "Bearer"}
         )

@@ -1,3 +1,4 @@
+# routes/users.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import get_db
@@ -11,9 +12,13 @@ router = APIRouter()
 @router.post("", response_model=UserResponse)
 @router.post("/", response_model=UserResponse)
 def create_user(user_in: UserCreate, db: Session = Depends(get_db)):
+    """Create a new user account"""
     existing = db.query(User).filter(User.email == user_in.email).first()
     if existing:
-        raise HTTPException(status_code=400, detail="User already exists")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User already exists"
+        )
 
     new_user = User(email=user_in.email, name=user_in.name)
     new_user.set_password(user_in.password)
@@ -26,9 +31,14 @@ def create_user(user_in: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(credentials: UserLogin, db: Session = Depends(get_db)):
+    """Authenticate user and return JWT token"""
     user = db.query(User).filter(User.email == credentials.email).first()
     if not user or not user.check_password(credentials.password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
 
     access_token = create_access_token(
         user_id=user.id,
@@ -44,4 +54,5 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=UserResponse)
 def get_current_user_info(current_user: User = Depends(get_current_user)):
+    """Get current authenticated user's information"""
     return current_user
