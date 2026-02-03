@@ -1,7 +1,9 @@
 # schemas/fee.py
 """
-Pydantic schemas for Fee
-Expose paid as a boolean, while DB stores paid as 0/1 integer.
+Pydantic schemas for Fee.
+
+DB stores Fee.paid as 0/1 int for cross-db stability.
+API exposes `paid` as a boolean (mapped from Fee.is_paid property).
 """
 from datetime import datetime
 
@@ -14,13 +16,13 @@ class FeeCreate(BaseModel):
     quantity: int | None = None
     calculated_amount: float
     override_amount: float | None = None
-    # NOTE: we do NOT accept "paid" here from users for fee creation
+    # Do not accept paid on create
 
 
 class FeeUpdate(BaseModel):
     """What admin sends when updating a fee"""
     override_amount: float | None = None
-    paid: bool | None = None
+    paid: bool | None = None  # incoming boolean
 
 
 class FeeResponse(BaseModel):
@@ -31,8 +33,7 @@ class FeeResponse(BaseModel):
     quantity: int | None
     calculated_amount: float
     override_amount: float | None
-    # IMPORTANT: read from Fee.is_paid property, but output as "paid"
-    paid: bool = Field(validation_alias="is_paid")
+    paid: bool = Field(serialization_alias="paid", validation_alias="is_paid")
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
@@ -45,7 +46,7 @@ class FeeDetailResponse(BaseModel):
     quantity: int | None
     calculated_amount: float
     override_amount: float | None
-    paid: bool = Field(validation_alias="is_paid")
+    paid: bool = Field(serialization_alias="paid", validation_alias="is_paid")
     created_at: datetime
 
     # Nested rule info
