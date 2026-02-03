@@ -1,17 +1,19 @@
 # routes/reports.py
-
+"""
+Restaurant daily operations report generator
+Creates PDF with timeline schedule of all reservations
+"""
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from datetime import datetime, date
 from io import BytesIO
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.enums import TA_CENTER
 
 from database import get_db
 from models.user import User
@@ -84,10 +86,10 @@ def create_daily_report_pdf(target_date: date, db: Session) -> BytesIO:
     
     # ==================== GET DATA ====================
     
-    # Get all reservations for the day
+    # Get all reservations for the day (Confirmed only)
     reservations = db.query(Reservation).filter(
         Reservation.date == target_date,
-        Reservation.status == "confirmed" # Only show confirmed
+        Reservation.status == "confirmed"
     ).order_by(Reservation.start_time).all()
     
     # Get all rooms
@@ -148,60 +150,58 @@ def create_daily_report_pdf(target_date: date, db: Session) -> BytesIO:
         time_slots.append((hour, time_str))
     
     # Build schedule table
-    # Header row: TIME | Room1 | Room2 | Room3 | ...
     header_row = ['TIME'] + [room.name for room in rooms]
     schedule_data = [header_row]
-    
     
     # For each time slot, find reservations
     for hour, time_str in time_slots:
         row = [time_str]
-
-    for room in rooms:
-        cell_content = ""
-
-        if not room.is_active:
-            cell_content = "CLOSED"
-        else:
-            found_reservations = []
-
-            for res in reservations:
-                if res.dining_room_id != room.id:
-                    continue
-
-                # Normalize start hour
-                if isinstance(res.start_time, str):
-                    start_hour = int(res.start_time.split(":")[0])
-                else:
-                    start_hour = res.start_time.hour
-
-                # Normalize end hour
-                if isinstance(res.end_time, str):
-                    end_hour = int(res.end_time.split(":")[0])
-                else:
-                    end_hour = res.end_time.hour
-
-                # 🔥 Correct overlap logic
-                # Show reservation for EVERY hour it spans
-                if start_hour <= hour < end_hour:
-                    user = db.query(User).filter_by(id=res.created_by_id).first()
-                    if not user:
+        
+        # -----------------------------------------------------------
+        # INDENTATION FIX: This loop is now INSIDE the time loop
+        # -----------------------------------------------------------
+        for room in rooms:
+            cell_content = ""
+            
+            if not room.is_active:
+                cell_content = "CLOSED"
+            else:
+                # Find ALL reservations for this room at this time
+                found_reservations = []
+                for res in reservations:
+                    if res.dining_room_id != room.id:
                         continue
+                        
+                    # Handle start_time types (string vs object)
+                    if isinstance(res.start_time, str):
+                        start_hour = int(res.start_time.split(':')[0])
+                    else:
+                        start_hour = res.start_time.hour
 
-                    attendee_count = db.query(ReservationAttendee).filter_by(
-                        reservation_id=res.id
-                    ).count()
-
-                    found_reservations.append(
-                        f"• {user.name} ({attendee_count})"
-                    )
-
-            if found_reservations:
-                cell_content = "\n".join(found_reservations)
-
-        row.append(cell_content)
-
-    schedule_data.append(row)
+                    # Handle end_time types
+                    if isinstance(res.end_time, str):
+                        end_hour = int(res.end_time.split(':')[0])
+                    else:
+                        end_hour = res.end_time.hour
+                    
+                    # LOGIC: Check if current timeline hour falls within reservation window
+                    if start_hour <= hour < end_hour:
+                        user = db.query(User).filter_by(id=res.created_by_id).first()
+                        if user:
+                            attendee_count = db.query(ReservationAttendee).filter_by(
+                                reservation_id=res.id
+                            ).count()
+                            # Append to list instead of breaking
+                            found_reservations.append(f"• {user.name} ({attendee_count})")
+                
+                # Join with newlines to show multiple
+                if found_reservations:
+                    cell_content = "\n".join(found_reservations)
+            
+            row.append(cell_content)
+        # -----------------------------------------------------------
+        
+        schedule_data.append(row)
     
     # Calculate column widths dynamically
     num_rooms = len(rooms)
@@ -212,7 +212,6 @@ def create_daily_report_pdf(target_date: date, db: Session) -> BytesIO:
     
     # Style the schedule table
     table_style = [
-        # Header row
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#121212')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
@@ -229,58 +228,31 @@ def create_daily_report_pdf(target_date: date, db: Session) -> BytesIO:
         ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
     ]
     
-    # Highlight closed rooms
-    for row_idx in range(1, len(schedule_data)):
-        for col_idx, room in enumerate(rooms, start=1):
-            if not room.is_active:
-                table_style.append(
-                    ('BACKGROUND', (col_idx, row_idx), (col_idx, row_idx), colors.HexColor('#e0e0e0'))
-                )
-                table_style.append(
-                    ('TEXTCOLOR', (col_idx, row_idx), (col_idx, row_idx), colors.HexColor('#757575'))
-                )
-    
-    # Highlight reservation cells
+    # Highlight cells
     for row_idx in range(1, len(schedule_data)):
         for col_idx in range(1, len(schedule_data[row_idx])):
             cell = schedule_data[row_idx][col_idx]
-            # Check for the bullet point we added
-            if cell and cell != "CLOSED" and "•" in cell:
-                table_style.append(
-                    ('BACKGROUND', (col_idx, row_idx), (col_idx, row_idx), colors.HexColor('#fff5f3'))
-                )
-                table_style.append(
-                    ('TEXTCOLOR', (col_idx, row_idx), (col_idx, row_idx), colors.HexColor('#121212'))
-                )
-                table_style.append(
-                    ('FONTNAME', (col_idx, row_idx), (col_idx, row_idx), 'Helvetica-Bold')
-                )
+            if cell == "CLOSED":
+                 table_style.append(('BACKGROUND', (col_idx, row_idx), (col_idx, row_idx), colors.HexColor('#e0e0e0')))
+                 table_style.append(('TEXTCOLOR', (col_idx, row_idx), (col_idx, row_idx), colors.HexColor('#757575')))
+            elif cell and "•" in cell:
+                table_style.append(('BACKGROUND', (col_idx, row_idx), (col_idx, row_idx), colors.HexColor('#fff5f3')))
+                table_style.append(('TEXTCOLOR', (col_idx, row_idx), (col_idx, row_idx), colors.HexColor('#121212')))
+                table_style.append(('FONTNAME', (col_idx, row_idx), (col_idx, row_idx), 'Helvetica-Bold'))
     
     schedule_table.setStyle(TableStyle(table_style))
     elements.append(schedule_table)
     
-    # ==================== FOOTER ====================
+    # Footer
     elements.append(Spacer(1, 0.3*inch))
-    
     footer_style = ParagraphStyle(
-        'Footer',
-        parent=styles['Normal'],
-        fontSize=8,
-        textColor=colors.HexColor('#757575'),
-        alignment=TA_CENTER,
-        fontName='Helvetica'
+        'Footer', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#757575'), alignment=TA_CENTER, fontName='Helvetica'
     )
+    elements.append(Paragraph(f"Generated on {datetime.now().strftime('%Y-%m-%d at %H:%M')} | Sterling Catering Operations", footer_style))
     
-    elements.append(Paragraph(
-        f"Generated on {datetime.now().strftime('%Y-%m-%d at %H:%M')} | Sterling Catering Operations",
-        footer_style
-    ))
-    
-    # Build PDF
     doc.build(elements)
     buffer.seek(0)
-    return buffer 
-
+    return buffer
 
 
 @router.get("/daily-pdf")
@@ -290,14 +262,6 @@ def get_daily_report_pdf(
     admin: User = Depends(get_admin_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Generate and download daily operations PDF
-    
-    Query params:
-    - date: Date in YYYY-MM-DD format (defaults to today)
-    """
-    
-    # Parse date or use today
     if date:
         try:
             target_date = datetime.strptime(date, "%Y-%m-%d").date()
@@ -306,16 +270,11 @@ def get_daily_report_pdf(
     else:
         target_date = datetime.now().date()
     
-    # Generate PDF
     pdf_buffer = create_daily_report_pdf(target_date, db)
-    
-    # Return as downloadable file
     filename = f"sterling_daily_report_{target_date.strftime('%Y%m%d')}.pdf"
     
     return StreamingResponse(
         pdf_buffer,
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        }
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
