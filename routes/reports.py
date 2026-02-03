@@ -270,7 +270,8 @@ def create_daily_report_pdf(target_date: date, db: Session) -> BytesIO:
     # Build PDF
     doc.build(elements)
     buffer.seek(0)
-    return buffer
+    return buffer 
+
 
 
 @router.get("/daily-pdf")
