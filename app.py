@@ -195,7 +195,7 @@ app.include_router(reports_router, prefix="/admin/reports", tags=["Reports"])
 print("✅ All routes registered successfully")
 
 
-@app.get("/", tags=["Health Check"])
+@app.api_route("/", methods=["GET", "HEAD"], tags=["Health Check"])
 def home():
     return {
         "message": "Sterling Catering API",
